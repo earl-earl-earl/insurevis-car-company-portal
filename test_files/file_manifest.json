@@ -1,0 +1,145 @@
+{
+  "generated_at": "2025-09-07T12:53:44.103Z",
+  "total_files": 11,
+  "files": [
+    {
+      "name": "test_damage_image.jpg",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_damage_image.jpg",
+      "type": "jpeg",
+      "size": "15.0 KB"
+    },
+    {
+      "name": "test_image_1.jpg",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_image_1.jpg",
+      "type": "jpeg",
+      "size": "12.0 KB"
+    },
+    {
+      "name": "test_image_2.jpg",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_image_2.jpg",
+      "type": "jpeg",
+      "size": "18.0 KB"
+    },
+    {
+      "name": "test_image_3.jpg",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_image_3.jpg",
+      "type": "jpeg",
+      "size": "22.0 KB"
+    },
+    {
+      "name": "test_document.pdf",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_document.pdf",
+      "type": "pdf",
+      "size": "25.0 KB"
+    },
+    {
+      "name": "insurance_claim.pdf",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\insurance_claim.pdf",
+      "type": "pdf",
+      "size": "35.0 KB"
+    },
+    {
+      "name": "vehicle_registration.pdf",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\vehicle_registration.pdf",
+      "type": "pdf",
+      "size": "15.0 KB"
+    },
+    {
+      "name": "test_data.txt",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_data.txt",
+      "type": "text",
+      "size": "5.0 KB"
+    },
+    {
+      "name": "assessment_data.json",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\assessment_data.json",
+      "type": "text",
+      "size": "2.0 KB"
+    },
+    {
+      "name": "large_image.jpg",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\large_image.jpg",
+      "type": "jpeg",
+      "size": "500.0 KB"
+    },
+    {
+      "name": "large_document.pdf",
+      "path": "C:\\dev\\insurevis\\web_portal\\test_files\\large_document.pdf",
+      "type": "pdf",
+      "size": "1000.0 KB"
+    }
+  ],
+  "usage": {
+    "small_files": [
+      {
+        "name": "test_damage_image.jpg",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_damage_image.jpg",
+        "type": "jpeg",
+        "size": "15.0 KB"
+      },
+      {
+        "name": "test_image_1.jpg",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_image_1.jpg",
+        "type": "jpeg",
+        "size": "12.0 KB"
+      },
+      {
+        "name": "test_image_2.jpg",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_image_2.jpg",
+        "type": "jpeg",
+        "size": "18.0 KB"
+      },
+      {
+        "name": "test_image_3.jpg",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_image_3.jpg",
+        "type": "jpeg",
+        "size": "22.0 KB"
+      },
+      {
+        "name": "test_document.pdf",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_document.pdf",
+        "type": "pdf",
+        "size": "25.0 KB"
+      },
+      {
+        "name": "insurance_claim.pdf",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\insurance_claim.pdf",
+        "type": "pdf",
+        "size": "35.0 KB"
+      },
+      {
+        "name": "vehicle_registration.pdf",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\vehicle_registration.pdf",
+        "type": "pdf",
+        "size": "15.0 KB"
+      },
+      {
+        "name": "test_data.txt",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\test_data.txt",
+        "type": "text",
+        "size": "5.0 KB"
+      },
+      {
+        "name": "assessment_data.json",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\assessment_data.json",
+        "type": "text",
+        "size": "2.0 KB"
+      }
+    ],
+    "medium_files": [],
+    "large_files": [
+      {
+        "name": "large_image.jpg",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\large_image.jpg",
+        "type": "jpeg",
+        "size": "500.0 KB"
+      },
+      {
+        "name": "large_document.pdf",
+        "path": "C:\\dev\\insurevis\\web_portal\\test_files\\large_document.pdf",
+        "type": "pdf",
+        "size": "1000.0 KB"
+      }
+    ]
+  }
+}
