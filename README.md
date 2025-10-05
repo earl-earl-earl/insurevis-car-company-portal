@@ -1,129 +1,84 @@
-# Car Company Web Portal Integration
+# InsureVis Admin Portal
 
-This web portal allows car manufacturers to integrate with the InsureVis mobile app, providing vehicle verification, document validation, and warranty services.
+The InsureVis Admin Portal provides a secure entry point for partner organisations (car companies and insurance carriers) while giving administrators a dedicated workflow for provisioning new accounts.
 
-## Features
+## Highlights
 
-### 🔍 **Document Verification**
-- Upload and verify vehicle registration documents
-- VIN validation against manufacturer database
-- Document authenticity checking
-- Real-time verification results
+- **Centralised login** powered by Supabase authentication with role-aware redirects to the correct workspace.
+- **Hidden admin sign-up** page at `/admin-signup/` for provisioning new partner or admin accounts (not linked from the UI).
+- **Dedicated partner dashboards** for car companies and insurance companies under `/car-company/` and `/insurance-company/`.
+- **Server-side API gateway** (`server.js`) for handling secure integrations and file operations.
 
-### 🚗 **Vehicle Database Management**
-- Complete vehicle database with VIN lookup
-- Add/edit vehicle information
-- Track warranty status
-- Search and filter capabilities
+## Getting Started
 
-### 🛡️ **Warranty & Recall Services**
-- Check warranty status by VIN
-- Active recall notifications
-- Coverage details and expiry dates
-- Service history tracking
+1. **Install dependencies**
+  ```powershell
+  npm install
+  ```
+2. **Configure Supabase**
+  - Confirm the Supabase URL and anon key in `public/login.js`, `public/admin-signup.js`, and `supabase_config.js`.
+  - Ensure portal roles (`car_company`, `insurance_company`, `admin`) exist in user metadata or supporting tables.
+3. **Run the server locally**
+  ```powershell
+  npm run dev
+  ```
+  The app serves static assets from `public/` and exposes API routes from `server.js`.
 
-### 🔗 **API Integration**
-- RESTful API for mobile app integration
-- Real-time data synchronization
-- Secure authentication
-- Rate limiting and monitoring
+## Key Pages
 
-## Setup Instructions
+- `/` – Partner login screen with role-based redirection.
+- `/admin-signup/` – Unlisted administrative sign-up form. Share the URL only with trusted personnel.
+- `/car-company/` – Car company workspace (accessible after login when the user role resolves to `car_company`).
+- `/insurance-company/` – Insurance carrier workspace (accessible after login when role resolves to `insurance_company`).
 
-### 1. Prerequisites
-- Web server (Apache/Nginx)
-- Node.js (for backend API)
-- SSL certificate for secure connections
+### Admin Sign-up Flow
 
-### 2. Installation
-1. Copy files to your web server directory
-2. Configure API endpoints in `script.js`
-3. Update authentication tokens
-4. Set up CORS for mobile app integration
+1. Navigate directly to `https://<your-domain>/admin-signup/`.
+2. Enter the email, password, and desired portal role.
+3. The form provisions a new Supabase user and stores the selected role in the user metadata so the login page can route correctly.
+4. Newly created users receive an email confirmation (if enabled in Supabase) before they can sign in.
 
-### 3. Configuration
-Update the API base URL in `script.js`:
-```javascript
-this.apiBaseUrl = 'https://your-domain.com/api';
-```
-
-## API Endpoints
-
-### Vehicle Information
-- `GET /api/vehicle/{vin}` - Get vehicle details
-- `GET /api/vehicle/{vin}/specs` - Get technical specifications
-
-### Document Verification
-- `POST /api/verify/document` - Verify uploaded documents
-- `GET /api/verify/status/{id}` - Check verification status
-
-### Warranty Services
-- `GET /api/warranty/{vin}` - Check warranty status
-- `POST /api/warranty/claim` - Submit warranty claim
-
-### Recalls
-- `POST /api/recall/check` - Check for active recalls
-- `GET /api/recalls/active` - Get all active recalls
-
-## Mobile App Integration
-
-The InsureVis mobile app can integrate with this portal through the `CarCompanyApiService` class:
-
-```dart
-// Verify vehicle information
-final vehicleInfo = await CarCompanyApiService.verifyVehicleInfo(vin);
-
-// Check warranty status
-final warranty = await CarCompanyApiService.checkWarranty(vin);
-
-// Submit documents for verification
-final result = await CarCompanyApiService.submitDocumentForVerification(
-  vin: vin,
-  documentType: 'registration',
-  documentPath: documentPath,
-  assessmentId: assessmentId,
-);
-```
-
-## Security Features
-
-- **Authentication**: Bearer token authentication
-- **HTTPS**: All communications encrypted
-- **Rate Limiting**: API rate limiting to prevent abuse
-- **Input Validation**: VIN format validation and document type checking
-- **Access Control**: Role-based access for different user types
-
-## Dashboard Features
-
-### Real-time Statistics
-- Documents verified today
-- Vehicles in database
-- Active warranties
-- API request volume
-
-### Activity Monitoring
-- Recent verification activities
-- System alerts and notifications
-- Performance metrics
-- Error tracking
-
-## File Structure
+## Project Structure
 
 ```
 web_portal/
-├── index.html          # Main portal interface
-├── styles.css          # Styling and responsive design
-├── script.js           # JavaScript functionality
-└── README.md           # This documentation
+├── public/
+│   ├── index.html                 # Login interface
+│   ├── login.js                   # Supabase login / role router
+│   ├── styles.css                 # Shared auth styling
+│   ├── admin-signup/
+│   │   └── index.html             # Hidden admin sign-up page
+│   ├── admin-signup.js            # Admin sign-up logic
+│   ├── car-company/
+│   │   ├── index.html             # Car company workspace shell
+│   │   ├── app.js                 # Car company portal logic
+│   │   └── styles.css             # Car company styling
+│   └── insurance-company/
+│       ├── index.html             # Insurance company workspace shell
+│       ├── app.js                 # Insurance company portal logic
+│       └── styles.css             # Insurance company styling
+├── server.js                      # Express server & API gateway
+├── supabase_config.js             # Supabase client configuration for server-side use
+├── generate_test_data.js          # Utility for creating sample data
+├── package.json                   # Project metadata and scripts
+└── README.md                      # Project documentation (this file)
 ```
 
-## Browser Compatibility
+## Scripts
 
-- Chrome 80+
-- Firefox 75+
-- Safari 13+
-- Edge 80+
+- `npm start` – Run the production server.
+- `npm run dev` – Start the development server with nodemon.
+- `npm run test:server` – Invoke legacy demo server tests (requires demo scripts).
+- `npm run generate-test-data` – Populate Supabase with demo data (requires proper environment setup).
+
+> **Note:** Some historical scripts refer to demo test files. They remain for compatibility but may require bespoke fixtures to execute successfully.
+
+## Deployment
+
+- The project is configured for Vercel (`vercel.json`) to serve `/public` as static assets and route everything else through `server.js`.
+- Dedicated rewrites ensure `/admin-signup/` and `/admin-signup.js` are served directly without hitting the login fallback.
+- Update environment variables in Vercel to match your Supabase credentials before deploying.
 
 ## Support
 
-For technical support or integration questions, contact the InsureVis development team.
+Questions or requests? Contact the InsureVis engineering team at [support@insurevis.com](mailto:support@insurevis.com).

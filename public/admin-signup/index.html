@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InsureVis Admin • Create Account</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://kit.fontawesome.com/467447bdef.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <noscript>
+      <div class="noscript-warning">
+        JavaScript is required to use the InsureVis portal. Please enable JavaScript and refresh this page.
+      </div>
+    </noscript>
+
+    <div class="login-page">
+      <div class="login-card" role="form" aria-labelledby="signup-title">
+        <div class="login-card__brand">
+          <div class="brand-icon">
+            <i class="fa-solid fa-user-shield"></i>
+          </div>
+          <div>
+            <h1 id="signup-title">Create an InsureVis Admin Account</h1>
+            <p>For administrative use only. Keep this URL confidential.</p>
+          </div>
+          <button id="logoutButton" class="logout-button" type="button" aria-label="Return to login" title="Return to login page">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
+
+        <form id="signupForm" autocomplete="off" novalidate>
+          <div class="form-field">
+            <label for="adminEmail">Email address</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-envelope"></i>
+              <input
+                id="adminEmail"
+                name="email"
+                type="email"
+                placeholder="admin@example.com"
+                required
+                autocomplete="email"
+              />
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="adminPassword">Password</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-lock"></i>
+              <input
+                id="adminPassword"
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                required
+                minlength="8"
+                autocomplete="new-password"
+              />
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="confirmPassword">Confirm password</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-lock"></i>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                placeholder="Repeat password"
+                required
+                minlength="8"
+                autocomplete="new-password"
+              />
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="portalRole">Assign portal role</label>
+            <div class="input-wrapper select-wrapper">
+              <i class="fa-solid fa-user-tag"></i>
+              <select id="portalRole" name="role" required>
+                <option value="" disabled selected>Select role</option>
+                <option value="admin">Platform administrator</option>
+                <option value="car-company">Car company partner</option>
+                <option value="insurance-company">Insurance company partner</option>
+              </select>
+            </div>
+            <p class="field-hint">The selected role controls which workspace is available after login.</p>
+          </div>
+
+          <div
+            class="status-message"
+            id="signupMessage"
+            role="alert"
+            aria-live="polite"
+          ></div>
+
+          <button id="signupSubmit" type="submit" class="btn-primary">
+            <span class="btn-label">Create account</span>
+            <span class="btn-spinner" aria-hidden="true"></span>
+          </button>
+
+          <p class="form-note">
+            This form is intentionally hidden from navigation. Only administrators aware of this path should use it.
+          </p>
+        </form>
+
+        <div class="login-card__footer">
+          <p>
+            Already set up? <a href="/">Return to the login portal</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <script src="/admin-signup.js" defer></script>
+  </body>
+</html>

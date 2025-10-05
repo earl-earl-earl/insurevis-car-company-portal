@@ -2,12 +2,13 @@
   "version": 2,
   "builds": [
     { "src": "server.js", "use": "@vercel/node" },
-    { "src": "public/**/*", "use": "@vercel/static" },
-    { "src": "index.html", "use": "@vercel/static" }
+    { "src": "public/**/*", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/admin-signup(?:/index\\.html)?", "dest": "/public/admin-signup/index.html" },
+    { "src": "/admin-signup.js", "dest": "/public/admin-signup.js" },
     { "src": "/styles.css", "dest": "/public/styles.css" },
-    { "src": "/app.js", "dest": "/public/app.js" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "src": "/login.js", "dest": "/public/login.js" },
+    { "src": "/(.*)", "dest": "/public/index.html" }
   ]
 }

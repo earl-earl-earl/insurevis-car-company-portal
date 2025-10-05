@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InsureVis Portal Login</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://kit.fontawesome.com/467447bdef.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <noscript>
+      <div class="noscript-warning">
+        JavaScript is required to use the InsureVis portal. Please enable
+        JavaScript in your browser settings and refresh this page.
+      </div>
+    </noscript>
+
+    <div class="login-page">
+      <div class="login-card" role="form" aria-labelledby="login-title">
+        <div class="login-card__brand">
+          <div class="brand-icon">
+            <i class="fa-solid fa-shield"></i>
+          </div>
+          <div>
+            <h1 id="login-title">InsureVis Partner Portal</h1>
+            <p>Sign in to continue to your workspace</p>
+          </div>
+        </div>
+
+        <form id="loginForm" autocomplete="on" novalidate>
+          <div class="form-field">
+            <label for="email">Email address</label>
+            <div class="input-wrapper">
+              <i class="fas fa-envelope"></i>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="you@example.com"
+                required
+                autocomplete="email"
+              />
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="password">Password</label>
+            <div class="input-wrapper">
+              <i class="fas fa-lock"></i>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                required
+                autocomplete="current-password"
+                minlength="6"
+              />
+              <button
+                type="button"
+                class="toggle-password"
+                aria-label="Show password"
+              >
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <label class="remember-me">
+              <input id="remember" type="checkbox" name="remember" />
+              <span>Keep me signed in on this device</span>
+            </label>
+            <a href="#" class="forgot-link" id="forgotPasswordLink">Forgot password?</a>
+          </div>
+
+          <div
+            class="status-message"
+            id="loginMessage"
+            role="alert"
+            aria-live="polite"
+          ></div>
+
+          <button id="loginSubmit" type="submit" class="btn-primary">
+            <span class="btn-label">Sign in</span>
+            <span class="btn-spinner" aria-hidden="true"></span>
+          </button>
+        </form>
+
+        <div class="login-card__footer">
+          <p>
+            Access is restricted to authorised InsureVis partners. Need help?
+            <a href="mailto:support@insurevis.com">Contact support</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <script src="/login.js"></script>
+  </body>
+</html>

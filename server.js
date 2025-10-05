@@ -7,11 +7,12 @@ const { supabase } = require('./supabase_config');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+const PUBLIC_DIR = path.join(__dirname, 'public');
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname)); // Serve static files from the web_portal directory
+app.use(express.static(PUBLIC_DIR)); // Serve static assets from /public
 
 // File upload configuration - using memory storage for Supabase upload
 const upload = multer({ 
@@ -399,7 +400,7 @@ app.get('/api/health', (req, res) => {
 
 // Serve the web portal
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
 // Error handling middleware

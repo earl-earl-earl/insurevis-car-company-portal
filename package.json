@@ -1,7 +1,7 @@
 {
-  "name": "insurevis-car-portal",
+  "name": "insurevis-admin",
   "version": "1.0.0",
-  "description": "Car Company Web Portal for InsureVis Integration",
+  "description": "InsureVis Admin portal and partner workspaces",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -16,6 +16,7 @@
     "test-info": "node generate_test_data.js --info"
   },
   "keywords": [
+    "admin",
     "car",
     "insurance",
     "vehicle",

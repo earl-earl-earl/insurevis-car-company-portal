@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Insurance Company Document Verification Portal</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <div class="logo">
+          <i class="fas fa-shield-alt"></i>
+          <h1>Insurance Company Portal</h1>
+        </div>
+        <div class="right-content">
+          <div class="header-info">
+          <span>Document Verification System</span>
+        </div>
+        <button id="logoutButton" class="logout-button" type="button" aria-label="Sign out">
+            <i class="fas fa-arrow-right-from-bracket"></i>
+            <span>Sign out</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Claims List Page -->
+      <section id="claimsPage" class="page active">
+        <div class="page-header">
+          <h2>
+            <i class="fas fa-file-contract"></i> Insurance Claims Requiring
+            Verification
+          </h2>
+          <p>Click on a claim to view and verify insurance company documents</p>
+        </div>
+
+        <div class="search-container">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              id="claimsSearch"
+              placeholder="Search by claim number, user name, or status"
+            />
+          </div>
+          <div class="filter-controls">
+            <select id="statusFilter" title="Filter claims by status">
+              <option value="">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="submitted">Submitted</option>
+              <option value="under_review">Under Review</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="claims-table-container">
+          <table class="claims-table" id="claimsTable">
+            <thead>
+              <tr>
+                <th>Claim Number</th>
+                <th>User</th>
+                <th>Status</th>
+                <th>Car Verification</th>
+                <th>Insurance Verification</th>
+                <th>Total Documents</th>
+                <th>Pending Insurance Verification</th>
+                <th>Created Date</th>
+              </tr>
+            </thead>
+            <tbody id="claimsTableBody">
+              <!-- Claims data will be populated here -->
+            </tbody>
+          </table>
+        </div>
+
+        <div id="loadingClaims" class="loading">
+          <i class="fas fa-spinner fa-spin"></i> Loading claims...
+        </div>
+      </section>
+
+      <!-- Documents Page -->
+      <section id="documentsPage" class="page">
+        <div class="page-header">
+          <button id="backToClaims" class="btn-back">
+            <i class="fas fa-arrow-left"></i> Back to Claims
+          </button>
+          <div class="claim-info">
+            <h2 id="claimTitle">Claim Documents</h2>
+            <p id="claimDescription">
+              Insurance document verification and approval
+            </p>
+          </div>
+        </div>
+
+        <div class="documents-container">
+          <div class="verification-stats">
+            <div class="stat-card car-company">
+              <div class="stat-icon">
+                <i class="fas fa-car"></i>
+              </div>
+              <div class="stat-content">
+                <h3 id="carVerifiedDocs">0</h3>
+                <p>Car Company Verified</p>
+              </div>
+            </div>
+            <div class="stat-card insurance">
+              <div class="stat-icon">
+                <i class="fas fa-shield-alt"></i>
+              </div>
+              <div class="stat-content">
+                <h3 id="insuranceVerifiedDocs">0</h3>
+                <p>Insurance Verified</p>
+              </div>
+            </div>
+            <div class="stat-card pending">
+              <div class="stat-icon">
+                <i class="fas fa-clock"></i>
+              </div>
+              <div class="stat-content">
+                <h3 id="pendingInsuranceDocs">0</h3>
+                <p>Pending Insurance Verification</p>
+              </div>
+            </div>
+            <div class="stat-card total">
+              <div class="stat-icon">
+                <i class="fas fa-file-alt"></i>
+              </div>
+              <div class="stat-content">
+                <h3 id="totalDocs">0</h3>
+                <p>Total Documents</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="approval-section">
+            <div class="approval-status" id="approvalStatus">
+              <div class="status-indicator">
+                <i class="fas fa-clock"></i>
+                <span>Verification in progress...</span>
+              </div>
+            </div>
+
+            <div class="approval-actions-row">
+              <button id="approveClaimBtn" class="btn-approve" disabled>
+                <i class="fas fa-check-circle"></i> Approve
+              </button>
+
+              <button id="rejectClaimBtn" class="btn-reject">
+                <i class="fas fa-times-circle"></i> Reject
+              </button>
+
+              <button id="holdClaimBtn" class="btn-hold">
+                <i class="fas fa-pause-circle"></i> Hold (Under Review)
+              </button>
+            </div>
+          </div>
+
+          <!-- User Summary Card (appears above the incident details card) -->
+          <section id="userSummary" class="user-summary-card">
+            <div class="user-summary-inner">
+              <div class="user-summary-header">
+                <h3><i class="fas fa-user"></i> User Summary</h3>
+                <p class="user-sub">Primary claimant contact information</p>
+              </div>
+
+              <div class="user-grid">
+                <div class="user-field">
+                  <label>Name</label>
+                  <div id="userName">-</div>
+                </div>
+
+                <div class="user-field">
+                  <label>Email</label>
+                  <div id="userEmail">-</div>
+                </div>
+
+                <div class="user-field">
+                  <label>Phone</label>
+                  <div id="userPhone">-</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Incident Details Card (appears below the approval card) -->
+          <section id="incidentDetails" class="incident-details-card">
+            <div class="incident-details-inner">
+              <div class="incident-header">
+                <h3><i class="fas fa-exclamation-circle"></i> Incident Summary</h3>
+                <p class="incident-sub">Key incident metadata and narrative</p>
+              </div>
+
+              <div class="incident-grid">
+                <div class="incident-field">
+                  <label>Incident ID</label>
+                  <div id="incidentId">-</div>
+                </div>
+
+                <div class="incident-field">
+                  <label>Incident Date</label>
+                  <div id="incidentDateCard">-</div>
+                </div>
+
+                <div class="incident-field">
+                  <label>Incident Place</label>
+                  <div id="incidentPlaceCard">-</div>
+                </div>
+
+                <div class="incident-field">
+                  <label>Incident Status</label>
+                  <div id="incidentStatusCard">-</div>
+                </div>
+
+                <div class="incident-field">
+                  <label>Estimated Cost</label>
+                  <div id="incidentEstimatedCost">-</div>
+                </div>
+
+                <div class="incident-description-field">
+                  <label>Incident Details</label>
+                  <div id="incidentDescriptionCard">-</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="documents-section">
+            <div class="section-header">
+              <h3>
+                <i class="fas fa-shield-alt"></i> Insurance Verifiable Documents
+              </h3>
+              <p>Documents that require insurance company verification</p>
+            </div>
+            <div class="documents-grid" id="insuranceDocumentsGrid">
+              <!-- Insurance verifiable documents will be populated here -->
+            </div>
+          </div>
+
+          <div class="documents-section">
+            <div class="section-header">
+              <h3><i class="fas fa-car"></i> Car Company Verified Documents</h3>
+              <p>Documents already verified by car company (view only)</p>
+            </div>
+            <div class="documents-grid readonly" id="carDocumentsGrid">
+              <!-- Car company documents will be populated here -->
+            </div>
+          </div>
+        </div>
+
+        <div id="loadingDocuments" class="loading">
+          <i class="fas fa-spinner fa-spin"></i> Loading documents...
+        </div>
+      </section>
+
+      <!-- Document Viewer Modal -->
+      <div id="documentViewerModal" class="modal">
+        <div class="modal-content large">
+          <div class="modal-header">
+            <h3 id="documentTitle">LTO Certificate of Registration</h3>
+            <span class="close" onclick="closeDocumentViewer()">&times;</span>
+          </div>
+          <div class="modal-body">
+            <!-- Document Header Info -->
+            <div class="document-header-info">
+              <div class="document-meta-grid">
+                <div class="meta-item">
+                  <label>Document Type:</label>
+                  <span id="docType">LTO Certificate of Registration</span>
+                </div>
+                <div class="meta-item">
+                  <label>File Name:</label>
+                  <span id="docFileName">business-image.jpeg</span>
+                </div>
+                <div class="meta-item">
+                  <label>Upload Date:</label>
+                  <span id="docUploadDate">Sep 7, 2024, 04:17 PM</span>
+                </div>
+                <div class="meta-item">
+                  <label>Status:</label>
+                  <span id="docStatus" class="status-uploaded">Uploaded</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- incident details removed from document viewer per request -->
+
+            <!-- Main Document Viewer Area -->
+            <div class="document-viewer-area">
+              <div class="document-display">
+                <div id="documentContent" class="document-content-wrapper">
+                  <!-- Document preview will be loaded here -->
+                  <div class="default-document-preview">
+                    <div class="document-placeholder">
+                      <img
+                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='250' fill='%23e2e8f0'%3E%3Crect width='200' height='250' fill='%23f7fafc'/%3E%3Cpath d='M50 30h100v20H50zm0 40h120v15H50zm0 30h80v15H50zm0 30h100v15H50z' fill='%23cbd5e0'/%3E%3C/svg%3E"
+                        alt="Document placeholder"
+                        class="document-placeholder-img"
+                      />
+                      <div class="document-info-text">
+                        <p class="document-filename">business-image.jpeg</p>
+                        <p class="document-size">248.7 KB</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Document Actions -->
+                <div class="document-actions-bar">
+                  <button class="btn-action" id="openInNewTab">
+                    <i class="fas fa-external-link-alt"></i> Open in New Tab
+                  </button>
+                  <button class="btn-action" id="nextDocument">
+                    <i class="fas fa-arrow-right"></i> Next URL
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Verification Section -->
+            <div class="verification-section" id="verificationSection">
+              <div class="verification-checkbox-container">
+                <label class="verification-checkbox">
+                  <input type="checkbox" id="verifyCheckbox" />
+                  <span class="checkbox-label"
+                    >Verify this document for insurance company requirements</span
+                  >
+                </label>
+              </div>
+
+              <div class="verification-notes-container">
+                <label for="verificationNotes" class="notes-label"
+                  >Verification Notes (Optional):</label
+                >
+                <textarea
+                  id="verificationNotes"
+                  class="verification-textarea"
+                  placeholder="Add any notes about the verification..."
+                ></textarea>
+              </div>
+
+              <div class="verification-actions">
+                <button id="saveVerification" class="btn-verify">
+                  <i class="fas fa-check"></i> Verify Document
+                </button>
+                <button
+                  id="cancelVerification"
+                  class="btn-cancel"
+                  onclick="closeDocumentViewer()"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="readonly-notice"
+              id="readonlyNotice"
+            >
+              <div class="notice-content">
+                <i class="fas fa-info-circle"></i>
+                <span
+                  >This document has been verified by the car company and is
+                  read-only for insurance review.</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Claim Approval Confirmation Modal -->
+      <div id="approvalModal" class="modal">
+        <div class="modal-content approval-modal">
+          <div class="modal-header">
+            <h3><i class="fas fa-check-circle"></i> Approve Claim</h3>
+            <span class="close" onclick="closeApprovalModal()">&times;</span>
+          </div>
+          <div class="modal-body">
+            <div class="approval-confirmation">
+              <div class="confirmation-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+              </div>
+              <h4>Confirm Claim Approval</h4>
+              <p>
+                Are you sure you want to approve this claim? This action will
+                mark the claim as successful and complete the verification
+                process.
+              </p>
+
+              <div class="claim-summary" id="claimSummary">
+                <!-- Claim summary will be populated here -->
+              </div>
+
+              <div class="approval-notes">
+                <label for="approvalNotes">Approval Notes (Optional):</label>
+                <textarea
+                  id="approvalNotes"
+                  placeholder="Add any final notes for claim approval..."
+                ></textarea>
+              </div>
+
+              <div class="approval-actions">
+                <button id="confirmApproval" class="btn-approve">
+                  <i class="fas fa-check-circle"></i> Confirm Approval
+                </button>
+                <button class="btn-secondary" onclick="closeApprovalModal()">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

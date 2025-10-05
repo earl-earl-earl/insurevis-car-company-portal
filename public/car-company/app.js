@@ -35,10 +35,96 @@ const DOCUMENT_TYPE_NAMES = {
     'additional_documents': 'Additional Documents'
 };
 
+const ROLE_ROUTES = {
+    car_company: '/car-company/',
+    'car-company': '/car-company/',
+    insurance_company: '/insurance-company/',
+    'insurance-company': '/insurance-company/'
+};
+
+function normalizeRole(role) {
+    if (!role) return null;
+    const value = String(role).toLowerCase().trim().replace(/[\s-]+/g, '_');
+    if (value.includes('car') && value.includes('company')) return 'car_company';
+    if (value.includes('insurance') && value.includes('company')) return 'insurance_company';
+    return ROLE_ROUTES[value] ? value : null;
+}
+
+function extractRoleFromMetadata(user) {
+    if (!user) return null;
+    const { app_metadata: appMeta = {}, user_metadata: userMeta = {} } = user;
+    const candidates = [];
+    if (appMeta.role) candidates.push(appMeta.role);
+    if (Array.isArray(appMeta.roles) && appMeta.roles.length > 0) candidates.push(appMeta.roles[0]);
+    if (userMeta.role) candidates.push(userMeta.role);
+    if (Array.isArray(userMeta.roles) && userMeta.roles.length > 0) candidates.push(userMeta.roles[0]);
+    for (const candidate of candidates) {
+        const normalized = normalizeRole(candidate);
+        if (normalized) return normalized;
+    }
+    return null;
+}
+
+async function resolveUserRole(user) {
+    const metaRole = extractRoleFromMetadata(user);
+    if (metaRole) return metaRole;
+
+    const fallbackSources = [
+        { table: 'profiles', column: 'role' },
+        { table: 'portal_profiles', column: 'role' }
+    ];
+
+    for (const source of fallbackSources) {
+        try {
+            const { data, error } = await supabase
+                .from(source.table)
+                .select(source.column)
+                .eq('id', user.id)
+                .maybeSingle();
+
+            if (!error && data && data[source.column]) {
+                const normalized = normalizeRole(data[source.column]);
+                if (normalized) return normalized;
+            }
+        } catch (err) {
+            console.debug(`Role lookup for ${source.table} skipped:`, err.message || err);
+        }
+    }
+
+    return null;
+}
+
+function redirectTo(path) {
+    if (!path) return;
+    window.location.replace(path);
+}
+
+async function bootstrapPortal() {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+
+        if (!user) {
+            redirectTo('/');
+            return;
+        }
+
+        const role = await resolveUserRole(user);
+        if (role !== 'car_company') {
+            const destination = ROLE_ROUTES[role] || '/';
+            redirectTo(destination);
+            return;
+        }
+
+        initializeApp();
+    } catch (error) {
+        console.error('Failed to initialise car company portal:', error);
+        redirectTo('/');
+    }
+}
+
 // Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
-    initializeApp();
-});
+document.addEventListener('DOMContentLoaded', bootstrapPortal);
 
 async function initializeApp() {
     console.log('Initializing Car Company Portal...');
@@ -230,6 +316,20 @@ function setupEventListeners() {
     
     // Navigation
     document.getElementById('backToClaims').addEventListener('click', showClaimsPage);
+
+    // Logout
+    const logoutButton = document.getElementById('logoutButton');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', async () => {
+            try {
+                await supabase.auth.signOut();
+            } catch (error) {
+                console.error('Failed to sign out:', error);
+            } finally {
+                window.location.replace('/');
+            }
+        });
+    }
     
     // Document verification
     document.getElementById('saveVerification').addEventListener('click', saveDocumentVerification);
