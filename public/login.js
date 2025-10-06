@@ -22,6 +22,7 @@ const ROLE_ROUTES = {
 };
 
 let isRedirecting = false;
+let isLoggingOut = false;
 
 function qs(id) {
   return document.getElementById(id);
@@ -158,11 +159,16 @@ async function redirectForUser(user, { silent = false } = {}) {
 }
 
 async function checkExistingSession() {
+  // Don't check session if we're in the middle of logging out
+  if (isLoggingOut) {
+    return;
+  }
+  
   try {
     const {
       data: { session }
     } = await supabase.auth.getSession();
-    if (session?.user) {
+    if (session?.user && !isLoggingOut) {
       await redirectForUser(session.user, { silent: true });
     }
   } catch (error) {
@@ -247,6 +253,16 @@ function wireEvents() {
 }
 
 async function bootstrap() {
+  // Check if we just logged out (flag set by portal apps)
+  if (sessionStorage.getItem('justLoggedOut') === 'true') {
+    isLoggingOut = true;
+    sessionStorage.removeItem('justLoggedOut');
+    // Clear the flag after a short delay
+    setTimeout(() => {
+      isLoggingOut = false;
+    }, 1000);
+  }
+  
   wireEvents();
   await checkExistingSession();
 }
@@ -254,11 +270,11 @@ async function bootstrap() {
 bootstrap();
 
 supabase.auth.onAuthStateChange((event, session) => {
-  // Don't redirect on SIGNED_OUT events to avoid redirect loops
-  if (event === 'SIGNED_OUT') {
+  // Don't redirect on SIGNED_OUT events or during logout to avoid redirect loops
+  if (event === 'SIGNED_OUT' || isLoggingOut) {
     return;
   }
-  if (session?.user) {
+  if (session?.user && !isLoggingOut) {
     redirectForUser(session.user, { silent: true });
   }
 });

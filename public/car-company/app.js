@@ -322,6 +322,8 @@ function setupEventListeners() {
     if (logoutButton) {
         logoutButton.addEventListener('click', async () => {
             try {
+                // Set flag to prevent login page from auto-redirecting
+                sessionStorage.setItem('justLoggedOut', 'true');
                 await supabase.auth.signOut();
             } catch (error) {
                 console.error('Failed to sign out:', error);
