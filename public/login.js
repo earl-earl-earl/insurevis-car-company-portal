@@ -253,7 +253,11 @@ async function bootstrap() {
 
 bootstrap();
 
-supabase.auth.onAuthStateChange((_event, session) => {
+supabase.auth.onAuthStateChange((event, session) => {
+  // Don't redirect on SIGNED_OUT events to avoid redirect loops
+  if (event === 'SIGNED_OUT') {
+    return;
+  }
   if (session?.user) {
     redirectForUser(session.user, { silent: true });
   }
