@@ -8,13 +8,11 @@
     { "src": "/admin-signup.js", "dest": "/public/admin-signup.js" },
     { "src": "/styles.css", "dest": "/public/styles.css" },
     { "src": "/login.js", "dest": "/public/login.js" },
-    { "src": "/car-company/app.js", "dest": "/public/car-company/app.js" },
-    { "src": "/car-company/styles.css", "dest": "/public/car-company/styles.css" },
-    { "src": "/insurance-company/app.js", "dest": "/public/insurance-company/app.js" },
-    { "src": "/insurance-company/styles.css", "dest": "/public/insurance-company/styles.css" },
+    { "src": "/car-company/(app\\.js|styles\\.css)", "dest": "/public/car-company/$1" },
+    { "src": "/insurance-company/(app\\.js|styles\\.css)", "dest": "/public/insurance-company/$1" },
     { "src": "/admin-signup(?:/.*)?", "dest": "/public/admin-signup/index.html" },
-    { "src": "/car-company(?:/.*)?", "dest": "/public/car-company/index.html" },
-    { "src": "/insurance-company(?:/.*)?", "dest": "/public/insurance-company/index.html" },
+    { "src": "/car-company(?:(?!/app\\.js|/styles\\.css).*)?", "dest": "/public/car-company/index.html" },
+    { "src": "/insurance-company(?:(?!/app\\.js|/styles\\.css).*)?", "dest": "/public/insurance-company/index.html" },
     { "src": "/public/(.*)", "dest": "/public/$1" },
     { "src": "/(?:index\\.html)?", "dest": "/public/index.html" }
   ]
