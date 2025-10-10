@@ -1141,6 +1141,7 @@ async function saveDocumentVerification() {
 function updateApprovalButtonStatus(insuranceDocuments) {
     const approveBtn = document.getElementById('approveClaimBtn');
     const approvalStatus = document.getElementById('approvalStatus');
+    const approvalActionsRow = document.getElementById('approvalActionsRow');
     
     const allVerified = insuranceDocuments.length > 0 && 
         insuranceDocuments.every(doc => doc.verified_by_insurance_company);
@@ -1164,6 +1165,11 @@ function updateApprovalButtonStatus(insuranceDocuments) {
                 <span>${pending} documents pending verification</span>
             </div>
         `;
+    }
+    
+    // Show the action buttons when on documents page
+    if (approvalActionsRow) {
+        approvalActionsRow.style.display = 'flex';
     }
 }
 
@@ -1278,11 +1284,19 @@ function showClaimsPage() {
     document.getElementById('documentsPage').classList.remove('active');
     currentClaim = null;
     currentClaimData = null;
+    document.body.classList.remove('claim-view-active');
+    
+    // Hide the fixed action buttons when returning to claims page
+    const approvalActionsRow = document.getElementById('approvalActionsRow');
+    if (approvalActionsRow) {
+        approvalActionsRow.style.display = 'none';
+    }
 }
 
 function showDocumentsPage() {
     document.getElementById('claimsPage').classList.remove('active');
     document.getElementById('documentsPage').classList.add('active');
+    document.body.classList.add('claim-view-active');
 }
 
 function closeDocumentViewer() {

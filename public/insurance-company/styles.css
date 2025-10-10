@@ -44,6 +44,10 @@
   --transition-spring: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+body {
+  background-repeat: no-repeat;
+}
+
 /* Force-override: Ensure approve button appears green when ready (highest precedence) */
 .approval-section .approval-actions-row .btn-approve.ready,
 .btn-approve.ready {
@@ -161,6 +165,9 @@
   margin: 0 auto;
   padding: 10px;
   position: relative;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center center;
 }
 
 /* Floating background elements */
@@ -181,6 +188,10 @@
       rgba(240, 147, 251, 0.05) 0%,
       transparent 50%
     );
+  /* Prevent any tiling/repetition and ensure it's sized to cover the viewport */
+  background-repeat: no-repeat !important;
+  background-size: cover;
+  background-position: center center;
   animation: float 20s ease-in-out infinite;
   pointer-events: none;
   z-index: -1;
@@ -1490,10 +1501,45 @@
 }
 
 .approval-actions-row {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  right: auto;
+  width: min(220px, calc(100vw - 48px));
+  margin: 0;
+  padding: 20px 18px;
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 28px 60px rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 905;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 14px;
+}
+
+#documentsPage.active ~ .approval-actions-row {
   display: flex;
-  gap: 12px;
+}
+
+.approval-actions-row .btn-reject,
+.approval-actions-row .btn-hold,
+.approval-actions-row .btn-approve {
+  width: 100%;
   justify-content: center;
-  margin-top: 18px;
+  border-radius: 14px;
+  padding: 14px 18px;
+}
+
+@media (max-width: 600px) {
+  .approval-actions-row {
+    left: 16px;
+    bottom: 16px;
+    width: calc(100vw - 32px);
+    padding: 18px 16px;
+  }
 }
 
 .btn-reject,
@@ -3022,8 +3068,10 @@ textarea:focus,
   }
 }
 
-body {
-  height: 100vh;
+/* Let body grow with content and ensure backgrounds cover the full page */
+html, body {
+  min-height: 100%;
+  height: auto;
 }
 
 /* Print Styles */
@@ -3080,6 +3128,10 @@ body {
 
   body {
     background: linear-gradient(135deg, #2d3748 0%, #4a5568 50%, #553c9a 100%);
+    background-repeat: no-repeat !important;
+  background-size: cover !important;
+  background-position: center center !important;
+    color: var(--text-primary);
   }
 
   .header,

@@ -129,6 +129,12 @@ document.addEventListener('DOMContentLoaded', bootstrapPortal);
 async function initializeApp() {
     console.log('Initializing Car Company Portal...');
     
+    // Ensure action buttons are hidden on init
+    const decisionActions = document.getElementById('carClaimDecisionActions');
+    if (decisionActions) {
+        decisionActions.style.display = 'none';
+    }
+    
     // Set up event listeners
     setupEventListeners();
     
@@ -339,32 +345,7 @@ function setupEventListeners() {
     // Claim decision buttons (approve/reject/hold)
     setupClaimDecisionButtons();
 
-    // Runtime fallback: ensure decision buttons have consistent inline styles
-    enforceDecisionButtonStyles();
-
     // Claim status dropdown/control removed from UI; status updates are handled elsewhere.
-}
-
-// Runtime fallback helper: apply inline styles to decision buttons to override any
-// platform-specific UA styles that can't be easily overridden via CSS alone.
-function enforceDecisionButtonStyles() {
-    try {
-        const btns = document.querySelectorAll('.claim-decision-actions .decision-btn');
-        btns.forEach(b => {
-            // Only set styles that enforce consistent size/appearance
-            b.style.appearance = 'none';
-            b.style.webkitAppearance = 'none';
-            b.style.mozAppearance = 'none';
-            b.style.minHeight = '40px';
-            b.style.padding = '10px 14px';
-            b.style.borderRadius = '10px';
-            b.style.lineHeight = '1';
-            b.style.display = 'inlineFlex' in b.style ? b.style.display : 'inline-flex';
-        });
-    } catch (err) {
-        // ignore - this is a non-critical best-effort fallback
-        console.warn('enforceDecisionButtonStyles failed', err);
-    }
 }
 
 // Claims Management
@@ -530,6 +511,9 @@ async function loadClaimDocuments(claimId) {
             return;
         }
 
+        // Remember which claim is open
+        currentClaim = claim.id;
+
         // Update claim header
         document.getElementById('claimTitle').textContent = `Claim ${claim.claim_number}`;
         document.getElementById('claimDescription').textContent = 
@@ -608,6 +592,13 @@ async function loadClaimDocuments(claimId) {
         // Display documents
         displayDocuments(documents);
 
+        // Update decision buttons enabled/disabled state based on claim status
+        try {
+            setDecisionButtonsState(claim);
+        } catch (e) {
+            console.warn('Failed to set decision buttons state', e);
+        }
+
         // Show the claim status control for all claims when viewing the claim details.
         // If you later want to restrict this to claim owners or admins, add a
         // permission check here (e.g. compare current user id to claim.user_id).
@@ -630,11 +621,14 @@ function updateDocumentStats(documents) {
     document.getElementById('verifiedDocs').textContent = verified;
     document.getElementById('pendingDocs').textContent = pending;
 
-    // Show claim decision actions only when all car-company-verifiable documents are verified
-    const decisionActions = document.getElementById('claimDecisionActions');
+    // Only show claim decision actions when a claim is actively viewed
+    // and all car-company-verifiable documents for that claim are verified.
+    const decisionActions = document.getElementById('carClaimDecisionActions');
     if (decisionActions) {
-        if (total > 0 && verified === total) {
-            decisionActions.style.display = '';
+        const isClaimOpen = !!currentClaim;
+        const allVerified = total > 0 && verified === total;
+        if (isClaimOpen && allVerified) {
+            decisionActions.style.display = 'flex';
         } else {
             decisionActions.style.display = 'none';
         }
@@ -650,6 +644,34 @@ function setupClaimDecisionButtons() {
     if (approveBtn) approveBtn.addEventListener('click', () => decideClaim('approved'));
     if (rejectBtn) rejectBtn.addEventListener('click', () => decideClaim('rejected'));
     if (holdBtn) holdBtn.addEventListener('click', () => decideClaim('under_review'));
+}
+
+// Enable or disable decision buttons based on claim status
+function setDecisionButtonsState(claim) {
+    const approveBtn = document.getElementById('approveClaimBtn');
+    const rejectBtn = document.getElementById('rejectClaimBtn');
+    const holdBtn = document.getElementById('holdClaimBtn');
+    if (!approveBtn || !rejectBtn || !holdBtn) return;
+
+    // Approve button is enabled only when all car-company documents are verified
+    // and the claim is not already approved (claim.is_approved_by_car_company !== true).
+    const allDocsVerified = Array.isArray(currentDocuments) && currentDocuments.length > 0 && currentDocuments.every(d => !!d.verified_by_car_company);
+    const claimApprovedFlag = !!(claim && claim.is_approved_by_car_company);
+    const approveDisabled = !allDocsVerified || claimApprovedFlag;
+
+    approveBtn.disabled = !!approveDisabled;
+    if (approveBtn.disabled) approveBtn.classList.add('decision-btn--disabled'); else approveBtn.classList.remove('decision-btn--disabled');
+
+    // Other buttons: disable only if claim status directly maps to them
+    const status = (claim && claim.status ? String(claim.status).toLowerCase() : '');
+    const rejectDisabled = status === 'rejected';
+    const holdDisabled = status === 'under_review';
+
+    rejectBtn.disabled = !!rejectDisabled;
+    if (rejectBtn.disabled) rejectBtn.classList.add('decision-btn--disabled'); else rejectBtn.classList.remove('decision-btn--disabled');
+
+    holdBtn.disabled = !!holdDisabled;
+    if (holdBtn.disabled) holdBtn.classList.add('decision-btn--disabled'); else holdBtn.classList.remove('decision-btn--disabled');
 }
 
 async function decideClaim(decision) {
@@ -741,8 +763,8 @@ async function decideClaim(decision) {
             return;
         }
 
-        // Update UI: hide decision actions and refresh claims list and document header
-        document.getElementById('claimDecisionActions').style.display = 'none';
+    // Update UI: hide decision actions and refresh claims list and document header
+    document.getElementById('carClaimDecisionActions').style.display = 'none';
         showSuccess(decision === 'approved' ? 'Claim approved' : decision === 'rejected' ? 'Claim rejected' : 'Claim marked as Under Review');
         // Refresh claims and claim details
         await loadClaims();
@@ -1143,11 +1165,18 @@ function showClaimsPage() {
     document.getElementById('claimsPage').classList.add('active');
     document.getElementById('documentsPage').classList.remove('active');
     currentClaim = null;
+    document.body.classList.remove('claim-view-active');
+
+    const decisionActions = document.getElementById('carClaimDecisionActions');
+    if (decisionActions) {
+        decisionActions.style.display = 'none';
+    }
 }
 
 function showDocumentsPage() {
     document.getElementById('claimsPage').classList.remove('active');
     document.getElementById('documentsPage').classList.add('active');
+    document.body.classList.add('claim-view-active');
 }
 
 function closeDocumentViewer() {
