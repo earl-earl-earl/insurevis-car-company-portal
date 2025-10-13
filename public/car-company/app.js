@@ -918,6 +918,9 @@ async function viewDocument(documentId) {
     document.getElementById('documentViewerModal').style.display = 'flex';
 }
 
+// Feature flag: prefer fallback blob download over signed URLs
+const PREFER_STORAGE_DOWNLOAD = true;
+
 async function loadDocumentContent(doc) {
     const contentDiv = document.getElementById('documentContent');
     console.log('📥 Loading document content for:', doc.file_name);
@@ -931,8 +934,15 @@ async function loadDocumentContent(doc) {
     `;
     
     try {
-    // Get the document URL (may require async signed-url generation)
-    const fileUrl = await getDocumentUrl(doc);
+    // If we prefer storage download, skip generating signed URLs and go
+    // straight to the fallback renderer.
+    if (PREFER_STORAGE_DOWNLOAD) {
+        const fileExtensionPref = getFileExtension(doc.file_name);
+        await __fallbackDocView(doc.id, fileExtensionPref);
+        return;
+    }
+    // Otherwise, generate a signed URL with a longer expiry.
+    const fileUrl = await getDocumentUrl(doc, { expiresIn: 3600 }); // 1 hour
         
         if (!fileUrl) {
             console.error('❌ No URL found for document');
@@ -951,21 +961,21 @@ async function loadDocumentContent(doc) {
         const fileExtension = getFileExtension(doc.file_name);
         console.log('📄 File extension:', fileExtension);
         
-        if (isImageFile(fileExtension)) {
+    if (isImageFile(fileExtension)) {
             console.log('🖼️ Displaying as image');
             // Display image directly
             contentDiv.innerHTML = `
                 <div class="document-preview image-preview">
-                    <img src="${fileUrl}" alt="${doc.file_name}" 
+                    <img id="doc-img-${doc.id}" src="${fileUrl}" alt="${doc.file_name}" 
                          style="max-width: 100%; max-height: 600px; object-fit: contain; opacity: 0; transition: opacity 0.3s;"
                          onload="console.log('✅ Image loaded successfully'); this.style.opacity='1'" 
-                         onerror="console.error('❌ Image failed to load:', '${fileUrl}'); this.parentElement.innerHTML='<div class=error-preview><i class=fas fa-exclamation-triangle></i><p>Error loading image</p><p>URL: <a href=\\'${fileUrl}\\' target=\\'_blank\\'>${fileUrl}</a></p><p>Try clicking the URL above to test if it works in a new tab</p></div>'" />
+                         onerror="console.error('❌ Image failed to load:', '${fileUrl}'); __fallbackDocView('${doc.id}', '${fileExtension}')" />
                     <div class="image-info">
                         <p class="file-name">${doc.file_name}</p>
                         <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
-                        <a href="${fileUrl}" target="_blank" class="btn-secondary">
+                        <button onclick="openDocumentInNewTab('${doc.id}')" class="btn-secondary">
                             <i class="fas fa-external-link-alt"></i> Open in New Tab
-                        </a>
+                        </button>
                         <button onclick="testImageUrl('${fileUrl}')" class="btn-secondary">
                             <i class="fas fa-vial"></i> Test URL
                         </button>
@@ -977,19 +987,22 @@ async function loadDocumentContent(doc) {
             // Display PDF using iframe
             contentDiv.innerHTML = `
                 <div class="document-preview pdf-preview">
-                    <iframe src="${fileUrl}" 
+                    <iframe id="doc-pdf-${doc.id}" src="${fileUrl}" 
                             style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 8px;"
                             title="PDF Viewer - ${doc.file_name}">
                         <p>Your browser doesn't support PDF viewing. 
-                           <a href="${fileUrl}" target="_blank">Click here to open PDF</a>
+                           <a href="javascript:void(0)" onclick="openDocumentInNewTab('${doc.id}')">Click here to open PDF</a>
                         </p>
                     </iframe>
                     <div class="pdf-info">
                         <p class="file-name">${doc.file_name}</p>
                         <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
-                        <a href="${fileUrl}" target="_blank" class="btn-secondary">
+                        <button onclick="openDocumentInNewTab('${doc.id}')" class="btn-secondary">
                             <i class="fas fa-external-link-alt"></i> Open in New Tab
-                        </a>
+                        </button>
+                        <button onclick="__fallbackDocView('${doc.id}', 'pdf')" class="btn-secondary">
+                            <i class="fas fa-file-download"></i> Try Fallback
+                        </button>
                     </div>
                 </div>
             `;
@@ -1005,9 +1018,12 @@ async function loadDocumentContent(doc) {
                         <p class="file-name">${doc.file_name}</p>
                         <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
                         <p class="file-type">Type: ${fileExtension.toUpperCase()}</p>
-                        <a href="${fileUrl}" target="_blank" class="btn-secondary">
-                            <i class="fas fa-download"></i> Download File
-                        </a>
+                        <button onclick="openDocumentInNewTab('${doc.id}')" class="btn-secondary">
+                            <i class="fas fa-download"></i> Download / Open
+                        </button>
+                        <button onclick="__fallbackDocView('${doc.id}', '${fileExtension}')" class="btn-secondary">
+                            <i class="fas fa-file-download"></i> Try Fallback
+                        </button>
                     </div>
                 </div>
             `;
@@ -1025,32 +1041,72 @@ async function loadDocumentContent(doc) {
     }
 }
 
-function getDocumentUrl(doc) {
+// Parse a Supabase Storage URL and extract bucket + object path. Supports
+// both public and signed URL formats and strips any query string.
+function parseStorageUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+    try {
+        const u = new URL(url);
+        // Drop query string when deriving object path
+        const pathname = u.pathname;
+        // Expected patterns:
+        // - /storage/v1/object/public/<bucket>/<object>
+        // - /storage/v1/object/sign/<bucket>/<object>
+        const parts = pathname.split('/').filter(Boolean);
+        const idx = parts.findIndex(p => p === 'object');
+        if (idx === -1 || parts.length < idx + 3) return null;
+        const kind = parts[idx + 1]; // 'public' or 'sign' or possibly bucket directly in older formats
+        let bucket, objectPath;
+        if (kind === 'public' || kind === 'sign') {
+            bucket = parts[idx + 2];
+            objectPath = parts.slice(idx + 3).join('/');
+        } else {
+            // Fallback: /object/<bucket>/<object>
+            bucket = parts[idx + 1];
+            objectPath = parts.slice(idx + 2).join('/');
+        }
+        if (!bucket || !objectPath) return null;
+        return { bucket, path: objectPath };
+    } catch (_) {
+        return null;
+    }
+}
+
+function getDocumentUrl(doc, options = {}) {
+    const { expiresIn = 3600, forceSigned = false } = options;
     // Use remote_url directly if available. If it's missing or inaccessible
     // (for example the bucket is private), try to generate a short-lived
     // signed URL from Supabase Storage as a fallback.
     return (async function() {
-        const url = doc.remote_url || doc.url || null;
-        console.log('🔗 Getting document URL (initial):', url);
+        const initialUrl = doc.remote_url || doc.url || null;
+        console.log('🔗 Getting document URL (initial):', initialUrl);
 
         // If there's an existing URL, do a lightweight HEAD check to detect
         // authorization errors (401/403). If the check fails or is blocked by
         // CORS, fall back to signed URL generation when possible.
-        if (url) {
-            try {
-                const resp = await fetch(url, { method: 'HEAD' });
-                if (resp.ok) {
-                    console.log('✅ Remote URL is accessible:', url);
-                    return url;
+        if (initialUrl && !forceSigned) {
+            // If the initial URL already looks like a signed URL (has token
+            // query string or uses /sign/), DON'T trust it (it may be expired).
+            // We'll prefer generating a fresh signed URL below.
+            const looksSigned = /[?&]token=/.test(initialUrl) || /\/storage\/v1\/object\/sign\//.test(initialUrl);
+            if (!looksSigned) {
+                try {
+                    const resp = await fetch(initialUrl, { method: 'HEAD' });
+                    if (resp.ok) {
+                        console.log('✅ Remote URL is accessible:', initialUrl);
+                        return initialUrl;
+                    }
+                    console.warn('⚠️ Remote URL returned non-ok status:', resp.status, initialUrl);
+                    if (resp.status !== 401 && resp.status !== 403) {
+                        // Return URL for non-auth errors (let iframe/img handle it)
+                        return initialUrl;
+                    }
+                } catch (err) {
+                    console.warn('⚠️ HEAD request failed (possible CORS or network):', err.message || err);
+                    // Continue to attempt signed URL generation
                 }
-                console.warn('⚠️ Remote URL returned non-ok status:', resp.status, url);
-                if (resp.status !== 401 && resp.status !== 403) {
-                    // Return URL for non-auth errors (let iframe/img handle it)
-                    return url;
-                }
-            } catch (err) {
-                console.warn('⚠️ HEAD request failed (possible CORS or network):', err.message || err);
-                // Continue to attempt signed URL generation
+            } else {
+                console.log('ℹ️ Stored URL appears to be signed; will generate a fresh one to avoid expired token.');
             }
         }
 
@@ -1058,22 +1114,23 @@ function getDocumentUrl(doc) {
         // fields saved in DB like `file_path` or `path`, otherwise attempt to
         // extract it from the stored remote_url.
         let objectPath = doc.file_path || doc.path || doc.filePath || null;
-        if (!objectPath && url) {
-            // Match URLs like: /storage/v1/object/public/<bucket>/<object>
-            const m = url.match(/\/storage\/v1\/object\/(?:public\/)?([^\/]+)\/(.+)$/);
-            if (m) {
-                objectPath = m[2];
-                console.log('🔎 Extracted object path from URL:', objectPath);
+        let bucketName = doc.bucket || 'insurevis-documents';
+        if (!objectPath && initialUrl) {
+            const parsed = parseStorageUrl(initialUrl);
+            if (parsed) {
+                bucketName = parsed.bucket || bucketName;
+                objectPath = parsed.path;
+                console.log('🔎 Extracted from URL -> bucket:', bucketName, 'path:', objectPath);
             }
         }
 
         // If we have an object path and a Supabase client, request a signed URL
         if (objectPath && typeof supabase !== 'undefined') {
             try {
-                console.log('🔐 Attempting to create signed URL for:', objectPath);
+                console.log('🔐 Attempting to create signed URL for:', objectPath, 'expiresIn:', expiresIn, 'bucket:', bucketName);
                 const { data, error } = await supabase.storage
-                    .from('insurevis-documents')
-                    .createSignedUrl(objectPath, 60); // 60 seconds
+                    .from(bucketName)
+                    .createSignedUrl(objectPath, expiresIn);
 
                 if (error) {
                     console.error('❌ Failed to create signed URL:', error.message || error);
@@ -1087,7 +1144,7 @@ function getDocumentUrl(doc) {
         }
 
         // Last resort: return whatever we have (may be null)
-        return url;
+        return initialUrl;
     })();
 }
 
@@ -1244,6 +1301,127 @@ function testImageUrl(url) {
             console.error('❌ Network error:', error);
             alert('❌ Network error: ' + error.message + '\n\nThis could be CORS, network, or authentication issues.');
         });
+}
+
+// On-demand open in a new tab with a fresh signed URL to avoid expired tokens.
+async function openDocumentInNewTab(documentId) {
+    try {
+        const doc = currentDocuments.find(d => d.id === documentId);
+        if (!doc) return;
+        if (typeof PREFER_STORAGE_DOWNLOAD !== 'undefined' && PREFER_STORAGE_DOWNLOAD) {
+            const { bucketName, objectPath } = resolveStorageObject(doc);
+            const { data, error } = await supabase.storage.from(bucketName).download(objectPath);
+            if (error || !data) {
+                console.error('openDocumentInNewTab download error:', error || 'no data');
+                alert('Unable to download the document for opening.');
+                return;
+            }
+            const blobUrl = URL.createObjectURL(data);
+            window.open(blobUrl, '_blank', 'noopener');
+        } else {
+            const freshUrl = await getDocumentUrl(doc, { expiresIn: 3600, forceSigned: true });
+            if (freshUrl) {
+                window.open(freshUrl, '_blank', 'noopener');
+            } else if (doc.remote_url) {
+                window.open(doc.remote_url, '_blank', 'noopener');
+            } else {
+                alert('Unable to generate URL for this document.');
+            }
+        }
+    } catch (e) {
+        console.error('openDocumentInNewTab error:', e);
+        alert('Failed to open document: ' + (e.message || e));
+    }
+}
+
+// Helper to resolve bucket and path for a document
+function resolveStorageObject(doc) {
+    let objectPath = doc.file_path || doc.path || doc.filePath || null;
+    let bucketName = doc.bucket || 'insurevis-documents';
+    const initialUrl = doc.remote_url || doc.url || null;
+    if (!objectPath && initialUrl) {
+        const parsed = parseStorageUrl(initialUrl);
+        if (parsed) {
+            bucketName = parsed.bucket || bucketName;
+            objectPath = parsed.path;
+        }
+    }
+    return { bucketName, objectPath };
+}
+
+// Fallback: download the file via Supabase Storage and render from a blob URL
+async function __fallbackDocView(documentId, fileExtension) {
+    try {
+        const doc = currentDocuments.find(d => d.id === documentId);
+        if (!doc) return;
+        const { bucketName, objectPath } = resolveStorageObject(doc);
+        if (!bucketName || !objectPath) {
+            console.warn('Fallback cannot resolve storage object');
+            alert('Unable to locate file path for fallback preview.');
+            return;
+        }
+        console.log('↩️ Fallback download from bucket:', bucketName, 'path:', objectPath);
+        const { data, error } = await supabase.storage.from(bucketName).download(objectPath);
+        if (error || !data) {
+            console.error('Fallback download error:', error || 'no data');
+            alert('Fallback download failed: ' + (error?.message || 'Unknown error'));
+            return;
+        }
+        const blobUrl = URL.createObjectURL(data);
+        const contentDiv = document.getElementById('documentContent');
+
+        if (isImageFile(fileExtension)) {
+            contentDiv.innerHTML = `
+                <div class="document-preview image-preview">
+                    <img src="${blobUrl}" alt="${doc.file_name}" 
+                         style="max-width: 100%; max-height: 600px; object-fit: contain; opacity: 0; transition: opacity 0.3s;"
+                         onload="this.style.opacity='1'" />
+                    <div class="image-info">
+                        <p class="file-name">${doc.file_name}</p>
+                        <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
+                        <a href="${blobUrl}" download="${doc.file_name}" class="btn-secondary">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                    </div>
+                </div>`;
+        } else if (fileExtension === 'pdf') {
+            contentDiv.innerHTML = `
+                <div class="document-preview pdf-preview">
+                    <iframe src="${blobUrl}" 
+                            style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 8px;"
+                            title="PDF Viewer - ${doc.file_name}">
+                        <p>Your browser doesn't support PDF viewing. 
+                           <a href="${blobUrl}" download="${doc.file_name}">Download PDF</a>
+                        </p>
+                    </iframe>
+                    <div class="pdf-info">
+                        <p class="file-name">${doc.file_name}</p>
+                        <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
+                        <a href="${blobUrl}" download="${doc.file_name}" class="btn-secondary">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                    </div>
+                </div>`;
+        } else {
+            contentDiv.innerHTML = `
+                <div class="document-preview file-preview">
+                    <div class="file-icon">
+                        <i class="fas fa-file-${getFileTypeIcon(fileExtension)}"></i>
+                    </div>
+                    <div class="file-details">
+                        <p class="file-name">${doc.file_name}</p>
+                        <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
+                        <p class="file-type">Type: ${fileExtension.toUpperCase()}</p>
+                        <a href="${blobUrl}" download="${doc.file_name}" class="btn-secondary">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                    </div>
+                </div>`;
+        }
+    } catch (e) {
+        console.error('Fallback view failed:', e);
+        alert('Fallback preview failed: ' + (e.message || e));
+    }
 }
 
 function formatDate(dateString) {
