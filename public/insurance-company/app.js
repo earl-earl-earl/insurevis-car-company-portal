@@ -1310,7 +1310,9 @@ async function approveClaim() {
             .from('claims')
             .update({
                 is_successful: true,
-                status: 'approved'
+                status: 'approved',
+                is_approved_by_insurance_company: true,
+                insurance_company_approval_date: new Date().toISOString()
             })
             .eq('id', currentClaim);
 

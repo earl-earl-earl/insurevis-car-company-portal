@@ -695,6 +695,7 @@ async function decideClaim(decision) {
         if (decision === 'approved') {
             // Mark claim as approved by car company
             updateData.is_approved_by_car_company = true;
+            updateData.car_company_approval_date = new Date().toISOString();
             // Also set a dedicated flag used earlier if exists
             // (already setting is_approved_by_car_company above)
             // Send notification to claim owner. Resolve user id from claim if possible.
@@ -719,6 +720,7 @@ async function decideClaim(decision) {
         } else if (decision === 'rejected') {
             // mark as not approved by car company
             updateData.is_approved_by_car_company = false;
+            updateData.car_company_approval_date = null;
             (async () => {
                 try {
                     const { data: claimData, error: claimErr } = await supabase
