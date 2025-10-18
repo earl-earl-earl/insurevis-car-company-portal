@@ -342,7 +342,7 @@ function setupEventListeners() {
     // Document verification
     document.getElementById('saveVerification').addEventListener('click', saveDocumentVerification);
 
-    // Claim decision buttons (approve/reject/hold)
+    // Claim decision buttons (approve/reject)
     setupClaimDecisionButtons();
 
     // Claim status dropdown/control removed from UI; status updates are handled elsewhere.
@@ -639,19 +639,16 @@ function updateDocumentStats(documents) {
 function setupClaimDecisionButtons() {
     const approveBtn = document.getElementById('approveClaimBtn');
     const rejectBtn = document.getElementById('rejectClaimBtn');
-    const holdBtn = document.getElementById('holdClaimBtn');
 
     if (approveBtn) approveBtn.addEventListener('click', () => decideClaim('approved'));
     if (rejectBtn) rejectBtn.addEventListener('click', () => decideClaim('rejected'));
-    if (holdBtn) holdBtn.addEventListener('click', () => decideClaim('under_review'));
 }
 
 // Enable or disable decision buttons based on claim status
 function setDecisionButtonsState(claim) {
     const approveBtn = document.getElementById('approveClaimBtn');
     const rejectBtn = document.getElementById('rejectClaimBtn');
-    const holdBtn = document.getElementById('holdClaimBtn');
-    if (!approveBtn || !rejectBtn || !holdBtn) return;
+    if (!approveBtn || !rejectBtn) return;
 
     // Approve button is enabled only when all car-company documents are verified
     // and the claim is not already approved (claim.is_approved_by_car_company !== true).
@@ -662,16 +659,11 @@ function setDecisionButtonsState(claim) {
     approveBtn.disabled = !!approveDisabled;
     if (approveBtn.disabled) approveBtn.classList.add('decision-btn--disabled'); else approveBtn.classList.remove('decision-btn--disabled');
 
-    // Other buttons: disable only if claim status directly maps to them
+    // Reject disabled only if already rejected
     const status = (claim && claim.status ? String(claim.status).toLowerCase() : '');
     const rejectDisabled = status === 'rejected';
-    const holdDisabled = status === 'under_review';
-
     rejectBtn.disabled = !!rejectDisabled;
     if (rejectBtn.disabled) rejectBtn.classList.add('decision-btn--disabled'); else rejectBtn.classList.remove('decision-btn--disabled');
-
-    holdBtn.disabled = !!holdDisabled;
-    if (holdBtn.disabled) holdBtn.classList.add('decision-btn--disabled'); else holdBtn.classList.remove('decision-btn--disabled');
 }
 
 async function decideClaim(decision) {
