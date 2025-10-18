@@ -101,6 +101,14 @@
         </div>
 
         <div class="documents-container">
+          <!-- Approved banner (shown when claim is already approved) -->
+          <div id="approvedBanner" class="approved-banner" role="status" aria-live="polite">
+            <i class="fas fa-circle-check"></i>
+            <div class="approved-text">
+              <strong>Claim approved by Insurance Company.</strong>
+              <span>This claim is now read-only. Document verification is disabled.</span>
+            </div>
+          </div>
           <div class="verification-stats">
             <div class="stat-card car-company">
               <div class="stat-icon">
@@ -421,6 +429,9 @@
         <i class="fas fa-pause-circle"></i> Hold (Under Review)
       </button>
     </div>
+
+    <!-- Toast notifications -->
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
     <script src="app.js"></script>
   </body>

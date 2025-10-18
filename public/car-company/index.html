@@ -127,6 +127,14 @@
               <!-- decision actions moved to header-right -->
             </div>
           </div>
+          <!-- Approved banner -->
+          <div id="approvedBanner" class="approved-banner" role="status" aria-live="polite">
+            <i class="fas fa-circle-check"></i>
+            <div class="approved-text">
+              <strong>Claim approved by Car Company.</strong>
+              <span>This claim is now read-only. Document verification is disabled.</span>
+            </div>
+          </div>
           <div class="verification-stats">
             <div class="stat-card">
               <div class="stat-icon">
@@ -282,6 +290,33 @@
         <span>Reject</span>
       </button>
   </div>
+
+    <!-- Approval Confirmation Modal -->
+    <div id="approvalConfirmModal" class="modal">
+      <div class="modal-content confirm">
+        <div class="modal-header">
+          <h3><i class="fas fa-triangle-exclamation warn-icon"></i> Confirm Approval</h3>
+          <span class="close" onclick="closeApprovalConfirm()">&times;</span>
+        </div>
+        <div class="modal-body">
+          <div class="confirm-body">
+            <p class="confirm-title">This action cannot be undone.</p>
+            <p>Approve claim?</p>
+          </div>
+          <div class="confirm-actions">
+            <button type="button" class="btn-secondary" onclick="closeApprovalConfirm()">
+              Cancel
+            </button>
+            <button type="button" id="confirmApproveBtn" class="btn-success">
+              <i class="fas fa-check"></i> Yes, Approve
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      <!-- Toast notifications -->
+      <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
     <script src="app.js"></script>
   </body>

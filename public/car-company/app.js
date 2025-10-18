@@ -9,6 +9,7 @@ const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
 let currentClaim = null;
 let currentDocuments = [];
 let currentVehicleInfo = null;
+let currentClaimApproved = false;
 
 // Car company verifiable document types
 const CAR_COMPANY_DOCUMENT_TYPES = [
@@ -425,7 +426,7 @@ function displayClaims(claims) {
     }
 
     tableBody.innerHTML = claims.map(claim => `
-        <tr class="claim-row" data-claim-id="${claim.id}">
+        <tr class="claim-row ${((claim.is_verified_by_car_company ?? claim.isVerifiedByCarCompany ?? claim.is_approved_by_car_company) ? 'approved-row' : '')}" data-claim-id="${claim.id}">
             <td>
                 <strong>${claim.claim_number}</strong>
             </td>
@@ -436,9 +437,18 @@ function displayClaims(claims) {
                 </div>
             </td>
             <td>
-                <span class="status-badge status-${claim.status}">
-                    ${formatStatus(claim.status)}
-                </span>
+                ${(() => {
+                    const approvedFlag = (
+                        claim.is_verified_by_car_company ??
+                        claim.isVerifiedByCarCompany ??
+                        claim.is_approved_by_car_company ??
+                        false
+                    );
+                    const approved = !!approvedFlag;
+                    const label = approved ? 'Approved' : 'In Review';
+                    const klass = approved ? 'approved' : 'under_review';
+                    return `<span class="status-badge status-${klass}">${label}</span>`;
+                })()}
             </td>
             <td>
                 <div class="verification-status">
@@ -511,8 +521,10 @@ async function loadClaimDocuments(claimId) {
             return;
         }
 
-        // Remember which claim is open
+    // Remember which claim is open
         currentClaim = claim.id;
+    // Track approval state for UI logic
+    currentClaimApproved = !!(claim.is_approved_by_car_company || claim.is_verified_by_car_company || claim.isVerifiedByCarCompany);
 
         // Update claim header
         document.getElementById('claimTitle').textContent = `Claim ${claim.claim_number}`;
@@ -599,6 +611,13 @@ async function loadClaimDocuments(claimId) {
             console.warn('Failed to set decision buttons state', e);
         }
 
+        // Apply approved visual/banner and lock controls if approved
+        try {
+            applyApprovedState(claim);
+        } catch (e) {
+            console.warn('Failed to apply approved state UI', e);
+        }
+
         // Show the claim status control for all claims when viewing the claim details.
         // If you later want to restrict this to claim owners or admins, add a
         // permission check here (e.g. compare current user id to claim.user_id).
@@ -640,7 +659,7 @@ function setupClaimDecisionButtons() {
     const approveBtn = document.getElementById('approveClaimBtn');
     const rejectBtn = document.getElementById('rejectClaimBtn');
 
-    if (approveBtn) approveBtn.addEventListener('click', () => decideClaim('approved'));
+    if (approveBtn) approveBtn.addEventListener('click', () => openApprovalConfirm());
     if (rejectBtn) rejectBtn.addEventListener('click', () => decideClaim('rejected'));
 }
 
@@ -659,9 +678,8 @@ function setDecisionButtonsState(claim) {
     approveBtn.disabled = !!approveDisabled;
     if (approveBtn.disabled) approveBtn.classList.add('decision-btn--disabled'); else approveBtn.classList.remove('decision-btn--disabled');
 
-    // Reject disabled only if already rejected
-    const status = (claim && claim.status ? String(claim.status).toLowerCase() : '');
-    const rejectDisabled = status === 'rejected';
+    // Reject is always available to allow explicit rejection notification
+    const rejectDisabled = claimApprovedFlag ? true : false;
     rejectBtn.disabled = !!rejectDisabled;
     if (rejectBtn.disabled) rejectBtn.classList.add('decision-btn--disabled'); else rejectBtn.classList.remove('decision-btn--disabled');
 }
@@ -675,7 +693,6 @@ async function decideClaim(decision) {
     try {
         const updateData = {};
         if (decision === 'approved') {
-            updateData.status = 'submitted';
             // Mark claim as approved by car company
             updateData.is_approved_by_car_company = true;
             // Also set a dedicated flag used earlier if exists
@@ -700,7 +717,6 @@ async function decideClaim(decision) {
                 }
             })();
         } else if (decision === 'rejected') {
-            updateData.status = 'rejected';
             // mark as not approved by car company
             updateData.is_approved_by_car_company = false;
             (async () => {
@@ -759,8 +775,9 @@ async function decideClaim(decision) {
     document.getElementById('carClaimDecisionActions').style.display = 'none';
         showSuccess(decision === 'approved' ? 'Claim approved' : decision === 'rejected' ? 'Claim rejected' : 'Claim marked as Under Review');
         // Refresh claims and claim details
-        await loadClaims();
-        await loadClaimDocuments(currentClaim);
+    await loadClaims();
+    await loadClaimDocuments(currentClaim);
+    try { applyApprovedState({ is_approved_by_car_company: updateData.is_approved_by_car_company }); } catch (e) {}
 
     } catch (err) {
         console.error('Error in decideClaim:', err);
@@ -860,7 +877,7 @@ function displayDocuments(documents) {
 
             <div class="document-actions">
                 <button class="btn-primary" onclick="viewDocument('${doc.id}')">
-                    <i class="fas fa-eye"></i> View & Verify
+                    <i class="fas fa-eye"></i> ${currentClaimApproved ? 'View' : 'View & Verify'}
                 </button>
             </div>
 
@@ -897,6 +914,19 @@ async function viewDocument(documentId) {
     
     verifyCheckbox.checked = doc.verified_by_car_company;
     verificationNotes.value = doc.car_company_verification_notes || '';
+
+    // Respect approved state: make view-only if claim already approved
+    if (currentClaimApproved) {
+        verifyCheckbox.disabled = true;
+        verificationNotes.disabled = true;
+        const saveBtn = document.getElementById('saveVerification');
+        if (saveBtn) saveBtn.disabled = true;
+    } else {
+        verifyCheckbox.disabled = false;
+        verificationNotes.disabled = false;
+        const saveBtn = document.getElementById('saveVerification');
+        if (saveBtn) saveBtn.disabled = false;
+    }
 
     // Load document content
     console.log('🔄 Loading document content...');
@@ -1150,6 +1180,10 @@ function isImageFile(extension) {
 }
 
 async function saveDocumentVerification() {
+    if (currentClaimApproved) {
+        showError('Claim is approved. Documents are view-only.');
+        return;
+    }
     const documentId = document.getElementById('saveVerification').dataset.documentId;
     const isVerified = document.getElementById('verifyCheckbox').checked;
     const notes = document.getElementById('verificationNotes').value.trim();
@@ -1188,6 +1222,44 @@ async function saveDocumentVerification() {
             currentDocuments[docIndex] = { ...currentDocuments[docIndex], ...updateData };
         }
 
+        // If this action unverified a document, immediately mark the claim as not approved by car company
+        if (!isVerified && currentClaim) {
+            try {
+                await supabase
+                    .from('claims')
+                    .update({ is_approved_by_car_company: false, car_company_approval_date: null })
+                    .eq('id', currentClaim);
+            } catch (e) {
+                console.warn('Failed to set claim car-company approval to false after unverify:', e);
+            }
+        }
+
+        // Safety guard: if the platform auto-flipped the claim to approved when all
+        // docs are verified, revert it here. Only revert if the claim is not in a
+        // final approved/submitted state (those are set explicitly via Approve).
+        try {
+            const allDocsVerified = Array.isArray(currentDocuments) && currentDocuments.length > 0 && currentDocuments.every(d => !!d.verified_by_car_company);
+            if (currentClaim && allDocsVerified) {
+                const { data: claimRow, error: claimFetchErr } = await supabase
+                    .from('claims')
+                    .select('is_approved_by_car_company, status')
+                    .eq('id', currentClaim)
+                    .single();
+                if (!claimFetchErr && claimRow && claimRow.is_approved_by_car_company === true) {
+                    const status = (claimRow.status || '').toLowerCase();
+                    // Don't revert if claim was explicitly moved to submitted/approved via Approve button
+                    if (status !== 'submitted' && status !== 'approved') {
+                        await supabase
+                            .from('claims')
+                            .update({ is_approved_by_car_company: false })
+                            .eq('id', currentClaim);
+                    }
+                }
+            }
+        } catch (guardErr) {
+            console.warn('Guard: could not ensure claim approval stays manual-only:', guardErr);
+        }
+
         // Refresh displays
         updateDocumentStats(currentDocuments);
         displayDocuments(currentDocuments);
@@ -1203,9 +1275,79 @@ async function saveDocumentVerification() {
             loadClaims();
         }, 1000);
 
+        // Immediately refresh decision buttons state so Approve enables without navigation
+        try {
+            if (currentClaim) {
+                const { data: freshClaim, error: freshErr } = await supabase
+                    .from('claims')
+                    .select('id, status, is_approved_by_car_company')
+                    .eq('id', currentClaim)
+                    .single();
+                if (!freshErr && freshClaim) {
+                    setDecisionButtonsState(freshClaim);
+                    applyApprovedState(freshClaim);
+                }
+            }
+        } catch (btnErr) {
+            console.warn('Could not refresh decision button state:', btnErr);
+        }
+
     } catch (error) {
         console.error('Error saving verification:', error);
         showError('Failed to save verification status');
+    }
+}
+
+// UI helpers for approval confirmation and approved state
+function openApprovalConfirm() {
+    const modal = document.getElementById('approvalConfirmModal');
+    if (!modal) return decideClaim('approved');
+    modal.style.display = 'flex';
+    const confirmBtn = document.getElementById('confirmApproveBtn');
+    if (confirmBtn) {
+        const newBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+        newBtn.addEventListener('click', async () => {
+            closeApprovalConfirm();
+            await decideClaim('approved');
+        });
+    }
+}
+
+function closeApprovalConfirm() {
+    const modal = document.getElementById('approvalConfirmModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function applyApprovedState(claim) {
+    const approved = !!(claim && (claim.is_verified_by_car_company || claim.isVerifiedByCarCompany || claim.is_approved_by_car_company));
+    currentClaimApproved = approved;
+    const banner = document.getElementById('approvedBanner');
+    const page = document.getElementById('documentsPage');
+    const decisionActions = document.getElementById('carClaimDecisionActions');
+
+    if (approved) {
+        if (banner) banner.style.display = '';
+        if (page) page.classList.add('view-only');
+        document.body.classList.add('view-only');
+        if (decisionActions) decisionActions.style.display = 'none';
+        // Also disable controls in the document modal if open
+        const checkbox = document.getElementById('verifyCheckbox');
+        const notes = document.getElementById('verificationNotes');
+        const saveBtn = document.getElementById('saveVerification');
+        if (checkbox) checkbox.disabled = true;
+        if (notes) notes.disabled = true;
+        if (saveBtn) saveBtn.disabled = true;
+    } else {
+        if (banner) banner.style.display = 'none';
+        if (page) page.classList.remove('view-only');
+        document.body.classList.remove('view-only');
+        const checkbox = document.getElementById('verifyCheckbox');
+        const notes = document.getElementById('verificationNotes');
+        const saveBtn = document.getElementById('saveVerification');
+        if (checkbox) checkbox.disabled = false;
+        if (notes) notes.disabled = false;
+        if (saveBtn) saveBtn.disabled = false;
     }
 }
 
@@ -1283,15 +1425,15 @@ function testImageUrl(url) {
         .then(response => {
             if (response.ok) {
                 console.log('✅ URL is accessible', response.status);
-                alert('✅ URL is accessible! Status: ' + response.status);
+                showSuccess('URL is accessible! Status: ' + response.status);
             } else {
                 console.log('❌ URL returned error:', response.status, response.statusText);
-                alert('❌ URL error: ' + response.status + ' - ' + response.statusText);
+                showError('URL error: ' + response.status + ' - ' + response.statusText);
             }
         })
         .catch(error => {
             console.error('❌ Network error:', error);
-            alert('❌ Network error: ' + error.message + '\n\nThis could be CORS, network, or authentication issues.');
+            showError('Network error: ' + error.message + '\nThis could be CORS, network, or authentication issues.');
         });
 }
 
@@ -1305,7 +1447,7 @@ async function openDocumentInNewTab(documentId) {
             const { data, error } = await supabase.storage.from(bucketName).download(objectPath);
             if (error || !data) {
                 console.error('openDocumentInNewTab download error:', error || 'no data');
-                alert('Unable to download the document for opening.');
+                showError('Unable to download the document for opening.');
                 return;
             }
             const blobUrl = URL.createObjectURL(data);
@@ -1317,12 +1459,12 @@ async function openDocumentInNewTab(documentId) {
             } else if (doc.remote_url) {
                 window.open(doc.remote_url, '_blank', 'noopener');
             } else {
-                alert('Unable to generate URL for this document.');
+                showError('Unable to generate URL for this document.');
             }
         }
     } catch (e) {
         console.error('openDocumentInNewTab error:', e);
-        alert('Failed to open document: ' + (e.message || e));
+        showError('Failed to open document: ' + (e.message || e));
     }
 }
 
@@ -1349,14 +1491,14 @@ async function __fallbackDocView(documentId, fileExtension) {
         const { bucketName, objectPath } = resolveStorageObject(doc);
         if (!bucketName || !objectPath) {
             console.warn('Fallback cannot resolve storage object');
-            alert('Unable to locate file path for fallback preview.');
+            showError('Unable to locate file path for fallback preview.');
             return;
         }
         console.log('↩️ Fallback download from bucket:', bucketName, 'path:', objectPath);
         const { data, error } = await supabase.storage.from(bucketName).download(objectPath);
         if (error || !data) {
             console.error('Fallback download error:', error || 'no data');
-            alert('Fallback download failed: ' + (error?.message || 'Unknown error'));
+            showError('Fallback download failed: ' + (error?.message || 'Unknown error'));
             return;
         }
         const blobUrl = URL.createObjectURL(data);
@@ -1412,7 +1554,7 @@ async function __fallbackDocView(documentId, fileExtension) {
         }
     } catch (e) {
         console.error('Fallback view failed:', e);
-        alert('Fallback preview failed: ' + (e.message || e));
+        showError('Fallback preview failed: ' + (e.message || e));
     }
 }
 
@@ -1507,20 +1649,44 @@ function getVehicleInfoForClaim(claimId) {
     };
 }
 
-function showError(message) {
-    // Simple error display - could be enhanced with a proper notification system
-    alert('Error: ' + message);
+// Toast/Pane notifications
+function notify(type, title, message, timeout = 4000) {
+    try {
+        const container = document.getElementById('toastContainer');
+        if (!container) {
+            console.warn('toastContainer not found');
+            return;
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <div class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '⚠️' : type === 'warning' ? '⚠️' : 'ℹ️'}</div>
+            <div class="toast-content">
+                <div class="toast-title">${title || (type === 'success' ? 'Success' : type === 'error' ? 'Error' : type === 'warning' ? 'Warning' : 'Notice')}</div>
+                <div class="toast-message">${message || ''}</div>
+            </div>
+            <button class="toast-close" aria-label="Close">×</button>
+        `;
+        const closer = toast.querySelector('.toast-close');
+        closer.addEventListener('click', () => container.removeChild(toast));
+        container.appendChild(toast);
+        if (timeout > 0) setTimeout(() => {
+            if (toast.parentNode === container) container.removeChild(toast);
+        }, timeout);
+    } catch (e) { console.warn('notify error', e); }
 }
 
-function showSuccess(message) {
-    // Simple success display - could be enhanced with a proper notification system
-    alert('Success: ' + message);
-}
+function showError(message) { notify('error', 'Error', message); }
+function showSuccess(message) { notify('success', 'Success', message); }
 
 // Close modal when clicking outside
 window.addEventListener('click', function(event) {
     const modal = document.getElementById('documentViewerModal');
     if (event.target === modal) {
         closeDocumentViewer();
+    }
+    const confirmModal = document.getElementById('approvalConfirmModal');
+    if (event.target === confirmModal) {
+        closeApprovalConfirm();
     }
 });

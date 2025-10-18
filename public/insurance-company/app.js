@@ -9,6 +9,7 @@ const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
 let currentClaim = null;
 let currentClaimData = null;
 let currentDocuments = [];
+let currentClaimApproved = false;
 
 // Insurance company verifiable document types
 const INSURANCE_DOCUMENT_TYPES = [
@@ -540,7 +541,7 @@ function displayClaims(claims) {
     }
 
     tableBody.innerHTML = claims.map(claim => `
-        <tr class="claim-row" data-claim-id="${claim.id}">
+        <tr class="claim-row ${((claim.is_approved_by_insurance_company || claim.status === 'approved') ? 'approved-row' : '')}" data-claim-id="${claim.id}">
             <td>
                 <strong>${claim.claim_number}</strong>
             </td>
@@ -661,8 +662,10 @@ async function loadClaimDocuments(claimId) {
             return;
         }
 
-        // Store claim data globally for use in document viewer
+    // Store claim data globally for use in document viewer
         currentClaimData = claim;
+    // Track approval state
+    currentClaimApproved = !!(claim.is_approved_by_insurance_company || claim.status === 'approved');
 
         // Update claim header
         document.getElementById('claimTitle').textContent = `Claim ${claim.claim_number}`;
@@ -766,8 +769,11 @@ async function loadClaimDocuments(claimId) {
         displayInsuranceDocuments(insuranceDocuments);
         displayCarDocuments(carDocuments);
 
-        // Update approval button status
+    // Update approval button status
         updateApprovalButtonStatus(insuranceDocuments);
+
+    // Apply approved state (banner and view-only UI)
+    applyApprovedState();
 
     } catch (error) {
         console.error('Error loading claim documents:', error);
@@ -837,8 +843,8 @@ function displayInsuranceDocuments(documents) {
             </div>
 
             <div class="document-actions">
-                <button class="btn-primary" onclick="viewDocument('${doc.id}', true)">
-                    <i class="fas fa-eye"></i> View & Verify
+                <button class="btn-primary" onclick="viewDocument('${doc.id}', ${!currentClaimApproved})">
+                    <i class="fas fa-eye"></i> ${currentClaimApproved ? 'View' : 'View & Verify'}
                 </button>
             </div>
 
@@ -914,7 +920,7 @@ async function viewDocument(documentId, canVerify) {
     const verificationSection = document.getElementById('verificationSection');
     const readonlyNotice = document.getElementById('readonlyNotice');
     
-    if (canVerify) {
+    if (canVerify && !currentClaimApproved) {
         verificationSection.style.display = 'block';
         readonlyNotice.classList.remove('show');
         
@@ -1075,6 +1081,10 @@ async function loadDocumentContent(doc) {
 }
 
 async function saveDocumentVerification() {
+    if (currentClaimApproved) {
+        showError('Claim is approved. Documents are view-only.');
+        return;
+    }
     const documentId = document.getElementById('saveVerification').dataset.documentId;
     const isVerified = document.getElementById('verifyCheckbox').checked;
     const notes = document.getElementById('verificationNotes').value.trim();
@@ -1107,6 +1117,25 @@ async function saveDocumentVerification() {
             return;
         }
 
+        // If a document is unverified, immediately clear the insurance company approval on the claim
+        if (!isVerified && currentClaim) {
+            try {
+                const { error: claimClearErr } = await supabase
+                    .from('claims')
+                    .update({
+                        is_approved_by_insurance_company: false,
+                        // Clear approval date if present in schema; ignored if column doesn't exist
+                        insurance_company_approval_date: null
+                    })
+                    .eq('id', currentClaim);
+                if (claimClearErr) {
+                    console.warn('Unable to clear insurance approval on claim after unverify:', claimClearErr);
+                }
+            } catch (e) {
+                console.warn('Error clearing insurance approval on claim after unverify:', e);
+            }
+        }
+
         // Update current documents array
         const docIndex = currentDocuments.findIndex(doc => doc.id === documentId);
         if (docIndex !== -1) {
@@ -1135,6 +1164,34 @@ async function saveDocumentVerification() {
     } catch (error) {
         console.error('Error saving verification:', error);
         showError('Failed to save verification status');
+    }
+}
+
+function applyApprovedState() {
+    const banner = document.getElementById('approvedBanner');
+    const docsPage = document.getElementById('documentsPage');
+    const actionsRow = document.getElementById('approvalActionsRow');
+    if (currentClaimApproved) {
+        if (banner) banner.style.display = '';
+        if (docsPage) docsPage.classList.add('view-only');
+        if (actionsRow) actionsRow.style.display = 'none';
+        // Disable verification controls proactively
+        const checkbox = document.getElementById('verifyCheckbox');
+        const notes = document.getElementById('verificationNotes');
+        const saveBtn = document.getElementById('saveVerification');
+        if (checkbox) checkbox.disabled = true;
+        if (notes) notes.disabled = true;
+        if (saveBtn) saveBtn.disabled = true;
+    } else {
+        if (banner) banner.style.display = 'none';
+        if (docsPage) docsPage.classList.remove('view-only');
+        if (actionsRow) actionsRow.style.display = '';
+        const checkbox = document.getElementById('verifyCheckbox');
+        const notes = document.getElementById('verificationNotes');
+        const saveBtn = document.getElementById('saveVerification');
+        if (checkbox) checkbox.disabled = false;
+        if (notes) notes.disabled = false;
+        if (saveBtn) saveBtn.disabled = false;
     }
 }
 
@@ -1399,13 +1456,11 @@ function getFileTypeIcon(format) {
 }
 
 function showError(message) {
-    // Simple error display - could be enhanced with a proper notification system
-    alert('Error: ' + message);
+    notify('error', 'Error', message);
 }
 
 function showSuccess(message) {
-    // Simple success display - could be enhanced with a proper notification system
-    alert('Success: ' + message);
+    notify('success', 'Success', message);
 }
 
 // Close modals when clicking outside
@@ -1420,4 +1475,31 @@ window.addEventListener('click', function(event) {
         closeApprovalModal();
     }
 });
+
+// Toast/Pane notifications
+function notify(type, title, message, timeout = 4000) {
+    try {
+        const container = document.getElementById('toastContainer');
+        if (!container) {
+            console.warn('toastContainer not found');
+            return;
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <div class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '⚠️' : type === 'warning' ? '⚠️' : 'ℹ️'}</div>
+            <div class="toast-content">
+                <div class="toast-title">${title || (type === 'success' ? 'Success' : type === 'error' ? 'Error' : type === 'warning' ? 'Warning' : 'Notice')}</div>
+                <div class="toast-message">${message || ''}</div>
+            </div>
+            <button class="toast-close" aria-label="Close">×</button>
+        `;
+        const closer = toast.querySelector('.toast-close');
+        closer.addEventListener('click', () => container.removeChild(toast));
+        container.appendChild(toast);
+        if (timeout > 0) setTimeout(() => {
+            if (toast.parentNode === container) container.removeChild(toast);
+        }, timeout);
+    } catch (e) { console.warn('notify error', e); }
+}
 
