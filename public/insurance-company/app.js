@@ -191,7 +191,7 @@ function setupEventListeners() {
     // Approve should open the approval modal (insurance flow)
     addEventListenerSafely('approveClaimBtn', 'click', showApprovalModal);
     // For Car Company decisions (approve/reject/hold) wire to decideClaim
-    addEventListenerSafely('rejectClaimBtn', 'click', function() { decideClaim('rejected'); });
+    addEventListenerSafely('rejectClaimBtn', 'click', openRejectionModal);
     addEventListenerSafely('holdClaimBtn', 'click', function() { decideClaim('under_review'); });
 }
 
@@ -291,7 +291,7 @@ async function performClaimAction(status, extraFields = {}) {
 
 
 // Decision helper for Car Company (approve/reject/under_review)
-async function decideClaim(decision) {
+async function decideClaim(decision, notes = '') {
     if (!currentClaim) {
         showError('No claim selected');
         return;
@@ -303,6 +303,7 @@ async function decideClaim(decision) {
             updateData.status = 'approved';
             // Mark claim as approved by car company
             updateData.is_approved_by_car_company = true;
+            if (notes) updateData.insurance_company_approval_notes = notes;
 
             // Notify claim owner (resolve user id then send)
             (async () => {
@@ -328,6 +329,7 @@ async function decideClaim(decision) {
             updateData.status = 'rejected';
             // mark as not approved by car company
             updateData.is_approved_by_car_company = false;
+            if (notes) updateData.insurance_company_approval_notes = notes;
 
             (async () => {
                 try {
@@ -339,7 +341,10 @@ async function decideClaim(decision) {
                     const userId = claimData && claimData.user_id ? claimData.user_id : null;
                     const claimNumber = claimData && claimData.claim_number ? claimData.claim_number : currentClaim;
                     if (userId) {
-                        sendNotifToUser(userId, 'Claim Rejected', `Your claim ${claimNumber} has been rejected by the Car Company. Please contact support for details.`, 'rejected');
+                        const message = notes 
+                            ? `Your claim ${claimNumber} has been rejected by the Insurance Company. \n\nReason: \n${notes}`
+                            : `Your claim ${claimNumber} has been rejected by the Insurance Company. Please contact support for details.`;
+                        sendNotifToUser(userId, 'Claim Rejected', message, 'rejected');
                     } else {
                         console.warn('decideClaim: could not determine user_id to notify (rejected)');
                     }
@@ -350,6 +355,7 @@ async function decideClaim(decision) {
 
         } else if (decision === 'under_review') {
             updateData.status = 'under_review';
+            if (notes) updateData.insurance_company_approval_notes = notes;
 
             (async () => {
                 try {
@@ -452,6 +458,29 @@ async function loadClaims() {
     loadingElement.style.display = 'block';
     
     try {
+        // First, migrate existing claims that have status='approved' but no is_approved_by_insurance_company flag
+        try {
+            const { data: claimsToMigrate, error: migrateCheckError } = await supabase
+                .from('claims')
+                .select('id, status, is_approved_by_insurance_company')
+                .eq('status', 'approved')
+                .or('is_approved_by_insurance_company.is.null,is_approved_by_insurance_company.eq.false');
+            
+            if (!migrateCheckError && claimsToMigrate && claimsToMigrate.length > 0) {
+                // Update claims in batches
+                for (const claim of claimsToMigrate) {
+                    await supabase
+                        .from('claims')
+                        .update({ is_approved_by_insurance_company: true })
+                        .eq('id', claim.id);
+                }
+                
+                console.log(`✅ Migrated ${claimsToMigrate.length} claims to set is_approved_by_insurance_company`);
+            }
+        } catch (migrateError) {
+            console.warn('Migration check skipped:', migrateError);
+        }
+        
         // Fetch claims with user information and document counts
         // Only show claims where ALL car company documents are verified
         const { data: claims, error } = await supabase
@@ -558,15 +587,25 @@ function displayClaims(claims) {
             </td>
             <td>
                 <div class="verification-status">
-                    ${claim.is_approved_by_car_company ? 
-                        '<i class="fas fa-check-circle text-success"></i> Verified' : 
-                        '<i class="fas fa-clock text-warning"></i> Pending'
-                    }
+                    ${(() => {
+                        const carStatus = claim.car_company_status || 'pending';
+                        if (carStatus === 'approved') {
+                            return '<i class="fas fa-check-circle text-success"></i> Approved';
+                        } else if (carStatus === 'rejected') {
+                            return '<i class="fas fa-times-circle text-danger"></i> Rejected';
+                        } else if (carStatus === 'under_review') {
+                            return '<i class="fas fa-hourglass-half text-info"></i> Under Review';
+                        } else {
+                            return '<i class="fas fa-clock text-warning"></i> Pending';
+                        }
+                    })()}
                 </div>
             </td>
             <td>
                 <div class="verification-status">
-                    ${claim.is_approved_by_insurance_company ? 
+                    ${claim.status === 'rejected' ? 
+                        '<i class="fas fa-times-circle text-danger"></i> Rejected' : 
+                        (claim.is_approved_by_insurance_company || claim.status === 'approved') ? 
                         '<i class="fas fa-check-circle text-success"></i> Verified' : 
                         '<i class="fas fa-clock text-warning"></i> Pending'
                     }
@@ -664,8 +703,10 @@ async function loadClaimDocuments(claimId) {
 
     // Store claim data globally for use in document viewer
         currentClaimData = claim;
-    // Track approval state
-    currentClaimApproved = !!(claim.is_approved_by_insurance_company || claim.status === 'approved');
+    // Track approval state - both approved and rejected should be view-only
+    const isApproved = claim.status === 'approved';
+    const isRejected = claim.status === 'rejected';
+    currentClaimApproved = isApproved || isRejected;
 
         // Update claim header
         document.getElementById('claimTitle').textContent = `Claim ${claim.claim_number}`;
@@ -809,46 +850,41 @@ function displayInsuranceDocuments(documents) {
     }
 
     documentsGrid.innerHTML = documents.map(doc => `
-        <div class="document-card ${doc.verified_by_insurance_company ? 'verified' : 'pending'}" 
+        <div class="document-list-item ${doc.verified_by_insurance_company ? 'verified' : 'pending'}" 
              data-document-id="${doc.id}">
-            <div class="document-header">
-                <div class="document-type">
-                    <i class="fas ${getDocumentIcon(doc.type)}"></i>
-                    <span>${DOCUMENT_TYPE_NAMES[doc.type] || doc.type}</span>
-                </div>
-                <div class="verification-badge">
-                    ${doc.verified_by_insurance_company ? 
-                        '<i class="fas fa-check-circle verified"></i>' : 
-                        '<i class="fas fa-clock pending"></i>'
-                    }
-                </div>
+            ${doc.is_primary ? '<div class="primary-badge">Primary</div>' : ''}
+            
+            <div class="document-icon">
+                <i class="fas ${getDocumentIcon(doc.type)}"></i>
             </div>
             
-            <div class="document-info">
-                <p class="file-name">${doc.file_name}</p>
-                <p class="upload-date">Uploaded: ${formatDate(doc.created_at)}</p>
-                ${doc.insurance_verification_date ? 
-                    `<p class="verified-date">Verified: ${formatDate(doc.insurance_verification_date)}</p>` : 
-                    ''
-                }
-            </div>
-
-            <div class="verification-indicators">
+            <div class="document-details">
+                <div class="document-title">
+                    <span class="doc-type-name">${DOCUMENT_TYPE_NAMES[doc.type] || doc.type}</span>
+                    ${doc.verified_by_insurance_company ? 
+                        '<span class="status-badge-mini verified"><i class="fas fa-check-circle"></i> Verified</span>' : 
+                        (currentClaimApproved ? '' : '<span class="status-badge-mini pending"><i class="fas fa-clock"></i> Pending</span>')
+                    }
+                </div>
+                <div class="document-meta">
+                    <span class="file-name">${doc.file_name}</span>
+                    <span class="meta-divider">•</span>
+                    <span class="upload-date">Uploaded ${formatDate(doc.created_at)}</span>
+                    ${doc.insurance_verification_date ? 
+                        `<span class="meta-divider">•</span><span class="verified-date">Verified ${formatDate(doc.insurance_verification_date)}</span>` : 
+                        ''
+                    }
+                </div>
                 ${doc.verified_by_car_company ? 
-                    '<span class="car-verified"><i class="fas fa-car"></i> Car Verified</span>' : ''
-                }
-                ${doc.verified_by_insurance_company ? 
-                    '<span class="insurance-verified"><i class="fas fa-shield-alt"></i> Insurance Verified</span>' : ''
+                    '<div class="verification-tags"><span class="tag-car-verified"><i class="fas fa-car"></i> Car Verified</span></div>' : ''
                 }
             </div>
 
-            <div class="document-actions">
-                <button class="btn-primary" onclick="viewDocument('${doc.id}', ${!currentClaimApproved})">
+            <div class="document-list-actions">
+                <button class="btn-view" onclick="viewDocument('${doc.id}', ${!currentClaimApproved})">
                     <i class="fas fa-eye"></i> ${currentClaimApproved ? 'View' : 'View & Verify'}
                 </button>
             </div>
-
-            ${doc.is_primary ? '<div class="primary-badge">Primary Document</div>' : ''}
         </div>
     `).join('');
 }
@@ -867,34 +903,32 @@ function displayCarDocuments(documents) {
     }
 
     documentsGrid.innerHTML = documents.map(doc => `
-        <div class="document-card readonly verified" data-document-id="${doc.id}">
-            <div class="document-header">
-                <div class="document-type">
-                    <i class="fas ${getDocumentIcon(doc.type)}"></i>
-                    <span>${DOCUMENT_TYPE_NAMES[doc.type] || doc.type}</span>
-                </div>
-                <div class="verification-badge">
-                    <i class="fas fa-check-circle verified"></i>
-                </div>
+        <div class="document-list-item readonly verified" data-document-id="${doc.id}">
+            ${doc.is_primary ? '<div class="primary-badge">Primary</div>' : ''}
+            
+            <div class="document-icon readonly-icon">
+                <i class="fas ${getDocumentIcon(doc.type)}"></i>
             </div>
             
-            <div class="document-info">
-                <p class="file-name">${doc.file_name}</p>
-                <p class="upload-date">Uploaded: ${formatDate(doc.created_at)}</p>
-                <p class="verified-date">Car Verified: ${formatDate(doc.car_company_verification_date)}</p>
+            <div class="document-details">
+                <div class="document-title">
+                    <span class="doc-type-name">${DOCUMENT_TYPE_NAMES[doc.type] || doc.type}</span>
+                    <span class="status-badge-mini verified"><i class="fas fa-check-circle"></i> Car Verified</span>
+                </div>
+                <div class="document-meta">
+                    <span class="file-name">${doc.file_name}</span>
+                    <span class="meta-divider">•</span>
+                    <span class="upload-date">Uploaded ${formatDate(doc.created_at)}</span>
+                    <span class="meta-divider">•</span>
+                    <span class="verified-date">Car Verified ${formatDate(doc.car_company_verification_date)}</span>
+                </div>
             </div>
 
-            <div class="verification-indicators">
-                <span class="car-verified"><i class="fas fa-car"></i> Car Company Verified</span>
-            </div>
-
-            <div class="document-actions">
-                <button class="btn-secondary" onclick="viewDocument('${doc.id}', false)">
+            <div class="document-list-actions">
+                <button class="btn-view-secondary" onclick="viewDocument('${doc.id}', false)">
                     <i class="fas fa-eye"></i> View Only
                 </button>
             </div>
-
-            ${doc.is_primary ? '<div class="primary-badge">Primary Document</div>' : ''}
         </div>
     `).join('');
 }
@@ -926,10 +960,8 @@ async function viewDocument(documentId, canVerify) {
         
         // Set verification status
         const verifyCheckbox = document.getElementById('verifyCheckbox');
-        const verificationNotes = document.getElementById('verificationNotes');
         
         verifyCheckbox.checked = doc.verified_by_insurance_company;
-        verificationNotes.value = doc.insurance_verification_notes || '';
         
         // Store current document ID for saving
         document.getElementById('saveVerification').dataset.documentId = documentId;
@@ -1087,7 +1119,6 @@ async function saveDocumentVerification() {
     }
     const documentId = document.getElementById('saveVerification').dataset.documentId;
     const isVerified = document.getElementById('verifyCheckbox').checked;
-    const notes = document.getElementById('verificationNotes').value.trim();
 
     if (!documentId) {
         showError('No document selected');
@@ -1096,8 +1127,7 @@ async function saveDocumentVerification() {
 
     try {
         const updateData = {
-            verified_by_insurance_company: isVerified,
-            insurance_verification_notes: notes || null
+            verified_by_insurance_company: isVerified
         };
 
         if (isVerified) {
@@ -1168,29 +1198,60 @@ async function saveDocumentVerification() {
 }
 
 function applyApprovedState() {
-    const banner = document.getElementById('approvedBanner');
+    const approvedBanner = document.getElementById('approvedBanner');
+    const rejectedBanner = document.getElementById('rejectedBanner');
+    const rejectionNotesDisplay = document.getElementById('rejectionNotesDisplay');
+    const rejectionNotesContent = document.getElementById('rejectionNotesContent');
     const docsPage = document.getElementById('documentsPage');
     const actionsRow = document.getElementById('approvalActionsRow');
-    if (currentClaimApproved) {
-        if (banner) banner.style.display = '';
+    
+    const approved = currentClaimApproved && currentClaimData && currentClaimData.status === 'approved';
+    const rejected = currentClaimData && currentClaimData.status === 'rejected';
+    
+    // Reset all banners first
+    if (approvedBanner) approvedBanner.style.display = 'none';
+    if (rejectedBanner) rejectedBanner.style.display = 'none';
+    if (rejectionNotesDisplay) rejectionNotesDisplay.style.display = 'none';
+    
+    if (approved) {
+        if (approvedBanner) approvedBanner.style.display = '';
         if (docsPage) docsPage.classList.add('view-only');
         if (actionsRow) actionsRow.style.display = 'none';
         // Disable verification controls proactively
         const checkbox = document.getElementById('verifyCheckbox');
-        const notes = document.getElementById('verificationNotes');
         const saveBtn = document.getElementById('saveVerification');
         if (checkbox) checkbox.disabled = true;
-        if (notes) notes.disabled = true;
+        if (saveBtn) saveBtn.disabled = true;
+    } else if (rejected) {
+        if (rejectedBanner) rejectedBanner.style.display = '';
+        if (docsPage) docsPage.classList.add('view-only');
+        if (actionsRow) actionsRow.style.display = 'none';
+        
+        // Show rejection notes if they exist
+        console.log('Rejected claim, checking notes:', currentClaimData.insurance_company_approval_notes);
+        if (currentClaimData.insurance_company_approval_notes) {
+            if (rejectionNotesContent) {
+                rejectionNotesContent.textContent = currentClaimData.insurance_company_approval_notes;
+            }
+            if (rejectionNotesDisplay) {
+                rejectionNotesDisplay.style.display = 'block';
+                console.log('Rejection notes display set to block');
+            }
+        } else {
+            console.log('No rejection notes found');
+        }
+        
+        // Disable verification controls
+        const checkbox = document.getElementById('verifyCheckbox');
+        const saveBtn = document.getElementById('saveVerification');
+        if (checkbox) checkbox.disabled = true;
         if (saveBtn) saveBtn.disabled = true;
     } else {
-        if (banner) banner.style.display = 'none';
         if (docsPage) docsPage.classList.remove('view-only');
-        if (actionsRow) actionsRow.style.display = '';
+        if (actionsRow) actionsRow.style.display = 'flex';
         const checkbox = document.getElementById('verifyCheckbox');
-        const notes = document.getElementById('verificationNotes');
         const saveBtn = document.getElementById('saveVerification');
         if (checkbox) checkbox.disabled = false;
-        if (notes) notes.disabled = false;
         if (saveBtn) saveBtn.disabled = false;
     }
 }
@@ -1199,6 +1260,11 @@ function updateApprovalButtonStatus(insuranceDocuments) {
     const approveBtn = document.getElementById('approveClaimBtn');
     const approvalStatus = document.getElementById('approvalStatus');
     const approvalActionsRow = document.getElementById('approvalActionsRow');
+    
+    // Always show the action buttons when documents are loaded
+    if (approvalActionsRow) {
+        approvalActionsRow.style.display = 'flex';
+    }
     
     const allVerified = insuranceDocuments.length > 0 && 
         insuranceDocuments.every(doc => doc.verified_by_insurance_company);
@@ -1222,11 +1288,6 @@ function updateApprovalButtonStatus(insuranceDocuments) {
                 <span>${pending} documents pending verification</span>
             </div>
         `;
-    }
-    
-    // Show the action buttons when on documents page
-    if (approvalActionsRow) {
-        approvalActionsRow.style.display = 'flex';
     }
 }
 
@@ -1368,6 +1429,48 @@ function closeApprovalModal() {
     document.getElementById('approvalNotes').value = '';
 }
 
+function openRejectionModal() {
+    console.log('openRejectionModal called, currentClaim:', currentClaim);
+    if (!currentClaim) {
+        console.error('No current claim selected');
+        showError('Please select a claim first');
+        return;
+    }
+    const modal = document.getElementById('rejectionModal');
+    console.log('Rejection modal element:', modal);
+    const notesTextarea = document.getElementById('rejectionNotes');
+    if (notesTextarea) notesTextarea.value = '';
+    if (modal) {
+        modal.style.display = 'flex';
+        console.log('Modal display set to flex');
+    } else {
+        console.error('Rejection modal element not found');
+    }
+    
+    // Set up confirm button handler
+    const confirmBtn = document.getElementById('confirmRejectBtn');
+    if (confirmBtn) {
+        const newBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+        newBtn.addEventListener('click', async () => {
+            const notes = document.getElementById('rejectionNotes').value.trim();
+            if (!notes) {
+                showError('Please provide a reason for rejection');
+                return;
+            }
+            closeRejectionModal();
+            await decideClaim('rejected', notes);
+        });
+    } else {
+        console.error('Confirm reject button not found');
+    }
+}
+
+function closeRejectionModal() {
+    const modal = document.getElementById('rejectionModal');
+    if (modal) modal.style.display = 'none';
+}
+
 // Filter functions
 // Filter functions
 function filterClaims() {
@@ -1469,12 +1572,16 @@ function showSuccess(message) {
 window.addEventListener('click', function(event) {
     const documentModal = document.getElementById('documentViewerModal');
     const approvalModal = document.getElementById('approvalModal');
+    const rejectionModal = document.getElementById('rejectionModal');
     
     if (event.target === documentModal) {
         closeDocumentViewer();
     }
     if (event.target === approvalModal) {
         closeApprovalModal();
+    }
+    if (event.target === rejectionModal) {
+        closeRejectionModal();
     }
 });
 

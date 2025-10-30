@@ -135,6 +135,20 @@
               <span>This claim is now read-only. Document verification is disabled.</span>
             </div>
           </div>
+          <div id="rejectedBanner" class="rejected-banner" role="status" aria-live="polite">
+            <i class="fas fa-times-circle"></i>
+            <div class="rejected-text">
+              <strong>Claim rejected by Car Company.</strong>
+              <span>This claim is now read-only. Document verification is disabled.</span>
+            </div>
+          </div>
+          <div id="rejectionNotesDisplay" class="rejection-notes-display">
+            <div class="notes-header">
+              <i class="fas fa-comment-dots"></i>
+              <strong>Rejection Reason:</strong>
+            </div>
+            <div class="notes-content" id="rejectionNotesContent"></div>
+          </div>
           <div class="verification-stats">
             <div class="stat-card">
               <div class="stat-icon">
@@ -242,16 +256,6 @@
                   >
                 </label>
 
-                <div class="verification-notes">
-                  <label for="verificationNotes"
-                    >Verification Notes (Optional):</label
-                  >
-                  <textarea
-                    id="verificationNotes"
-                    placeholder="Add any notes about the verification..."
-                  ></textarea>
-                </div>
-
                 <div class="verification-actions">
                   <button id="saveVerification" class="btn-primary">
                     <i class="fas fa-save"></i> Save Verification
@@ -309,6 +313,39 @@
             </button>
             <button type="button" id="confirmApproveBtn" class="btn-success">
               <i class="fas fa-check"></i> Yes, Approve
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rejection Modal -->
+    <div id="rejectionModal" class="modal">
+      <div class="modal-content confirm">
+        <div class="modal-header">
+          <h3><i class="fas fa-times-circle" style="color: #ef4444;"></i> Reject Claim</h3>
+          <span class="close" onclick="closeRejectionModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+          <div class="confirm-body">
+            <p class="confirm-title" style="color: #dc2626;">Please provide a reason for rejection</p>
+            <p>This information will be sent to the claim owner.</p>
+          </div>
+          <div class="rejection-notes-container">
+            <label for="rejectionNotes">Rejection Reason (Required):</label>
+            <textarea
+              id="rejectionNotes"
+              placeholder="Enter detailed reasons for rejecting this claim..."
+              rows="4"
+              required
+            ></textarea>
+          </div>
+          <div class="confirm-actions">
+            <button type="button" class="btn-secondary" onclick="closeRejectionModal()">
+              Cancel
+            </button>
+            <button type="button" id="confirmRejectBtn" class="btn-danger">
+              <i class="fas fa-times-circle"></i> Confirm Rejection
             </button>
           </div>
         </div>
