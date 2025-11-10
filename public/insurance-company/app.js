@@ -389,13 +389,16 @@ async function decideClaim(decision, notes = '') {
             return;
         }
 
-        // Update UI: hide decision actions and refresh claims list and document header
+        // Update UI: hide decision actions and redirect to home
         const decisionActionsEl = document.getElementById('claimDecisionActions');
         if (decisionActionsEl) decisionActionsEl.style.display = 'none';
         showSuccess(decision === 'approved' ? 'Claim approved' : decision === 'rejected' ? 'Claim rejected' : 'Claim marked as Under Review');
-        // Refresh claims and claim details
-        await loadClaims();
-        await loadClaimDocuments(currentClaim);
+        
+        // Redirect to home after decision
+        setTimeout(() => {
+            showClaimsPage();
+            loadClaims();
+        }, 1000);
 
     } catch (err) {
         console.error('Error in decideClaim:', err);
@@ -1386,11 +1389,11 @@ async function approveClaim() {
         closeApprovalModal();
         showSuccess('Claim approved successfully!');
         
-        // Return to claims page
+        // Redirect to home after approval
         setTimeout(() => {
             showClaimsPage();
             loadClaims();
-        }, 1500);
+        }, 1000);
 
     } catch (error) {
         console.error('Error approving claim:', error);
@@ -1585,7 +1588,7 @@ window.addEventListener('click', function(event) {
     }
 });
 
-// Toast/Pane notifications
+// Toast/Pane notifications - centered popup
 function notify(type, title, message, timeout = 4000) {
     try {
         const container = document.getElementById('toastContainer');
@@ -1594,7 +1597,7 @@ function notify(type, title, message, timeout = 4000) {
             return;
         }
         const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
+        toast.className = `toast toast-${type} toast-center`;
         toast.innerHTML = `
             <div class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '⚠️' : type === 'warning' ? '⚠️' : 'ℹ️'}</div>
             <div class="toast-content">
@@ -1604,11 +1607,27 @@ function notify(type, title, message, timeout = 4000) {
             <button class="toast-close" aria-label="Close">×</button>
         `;
         const closer = toast.querySelector('.toast-close');
-        closer.addEventListener('click', () => container.removeChild(toast));
+        closer.addEventListener('click', () => {
+            toast.classList.add('toast-hiding');
+            setTimeout(() => {
+                if (toast.parentNode === container) container.removeChild(toast);
+            }, 300);
+        });
         container.appendChild(toast);
-        if (timeout > 0) setTimeout(() => {
-            if (toast.parentNode === container) container.removeChild(toast);
-        }, timeout);
+        
+        // Add show class for animation
+        setTimeout(() => toast.classList.add('toast-show'), 10);
+        
+        if (timeout > 0) {
+            setTimeout(() => {
+                if (toast.parentNode === container) {
+                    toast.classList.add('toast-hiding');
+                    setTimeout(() => {
+                        if (toast.parentNode === container) container.removeChild(toast);
+                    }, 300);
+                }
+            }, timeout);
+        }
     } catch (e) { console.warn('notify error', e); }
 }
 

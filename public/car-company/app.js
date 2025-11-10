@@ -836,13 +836,15 @@ async function decideClaim(decision, notes = '') {
             return;
         }
 
-    // Update UI: hide decision actions and refresh claims list and document header
-    document.getElementById('carClaimDecisionActions').style.display = 'none';
+        // Update UI: hide decision actions and redirect to home
+        document.getElementById('carClaimDecisionActions').style.display = 'none';
         showSuccess(decision === 'approved' ? 'Claim approved' : decision === 'rejected' ? 'Claim rejected' : 'Claim marked as Under Review');
-        // Refresh claims and claim details
-    await loadClaims();
-    await loadClaimDocuments(currentClaim);
-    try { applyApprovedState({ is_approved_by_car_company: updateData.is_approved_by_car_company }); } catch (e) {}
+        
+        // Redirect to home after decision
+        setTimeout(() => {
+            showClaimsPage();
+            loadClaims();
+        }, 1000);
 
     } catch (err) {
         console.error('Error in decideClaim:', err);
@@ -1797,7 +1799,7 @@ function getVehicleInfoForClaim(claimId) {
     };
 }
 
-// Toast/Pane notifications
+// Toast/Pane notifications - centered popup
 function notify(type, title, message, timeout = 4000) {
     try {
         const container = document.getElementById('toastContainer');
@@ -1806,7 +1808,7 @@ function notify(type, title, message, timeout = 4000) {
             return;
         }
         const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
+        toast.className = `toast toast-${type} toast-center`;
         toast.innerHTML = `
             <div class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '⚠️' : type === 'warning' ? '⚠️' : 'ℹ️'}</div>
             <div class="toast-content">
@@ -1816,11 +1818,27 @@ function notify(type, title, message, timeout = 4000) {
             <button class="toast-close" aria-label="Close">×</button>
         `;
         const closer = toast.querySelector('.toast-close');
-        closer.addEventListener('click', () => container.removeChild(toast));
+        closer.addEventListener('click', () => {
+            toast.classList.add('toast-hiding');
+            setTimeout(() => {
+                if (toast.parentNode === container) container.removeChild(toast);
+            }, 300);
+        });
         container.appendChild(toast);
-        if (timeout > 0) setTimeout(() => {
-            if (toast.parentNode === container) container.removeChild(toast);
-        }, timeout);
+        
+        // Add show class for animation
+        setTimeout(() => toast.classList.add('toast-show'), 10);
+        
+        if (timeout > 0) {
+            setTimeout(() => {
+                if (toast.parentNode === container) {
+                    toast.classList.add('toast-hiding');
+                    setTimeout(() => {
+                        if (toast.parentNode === container) container.removeChild(toast);
+                    }, 300);
+                }
+            }, timeout);
+        }
     } catch (e) { console.warn('notify error', e); }
 }
 
