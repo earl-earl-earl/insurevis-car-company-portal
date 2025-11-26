@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Car Company Document Verification Portal</title>
-  <link rel="stylesheet" href="styles.css" />
+    <title>Car Company Document Verification Portal</title>
+    <link rel="stylesheet" href="styles.css" />
     <link
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
       rel="stylesheet"
@@ -21,7 +21,12 @@
         </div>
         <div class="header-info">
           <span>Document Verification System</span>
-          <button id="logoutButton" class="logout-button" type="button" aria-label="Sign out">
+          <button
+            id="logoutButton"
+            class="logout-button"
+            type="button"
+            aria-label="Sign out"
+          >
             <i class="fas fa-arrow-right-from-bracket"></i>
             <span>Sign out</span>
           </button>
@@ -51,9 +56,7 @@
           <div class="filter-controls">
             <select id="statusFilter" title="Filter claims by status">
               <option value="">All Statuses</option>
-              <option value="draft">Draft</option>
-              <option value="submitted">Submitted</option>
-              <option value="under_review">Under Review</option>
+              <option value="pending">Pending</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
@@ -67,9 +70,8 @@
                 <th>Claim Number</th>
                 <th>User</th>
                 <th>Status</th>
-                <th>Car Company Verification</th>
-                <th>Total Documents</th>
-                <th>Pending Car Verification</th>
+                <th>Uploaded Documents</th>
+                <th>Pending Documents</th>
                 <th>Created Date</th>
                 <th>Actions</th>
               </tr>
@@ -128,18 +130,34 @@
             </div>
           </div>
           <!-- Approved banner -->
-          <div id="approvedBanner" class="approved-banner" role="status" aria-live="polite">
+          <div
+            id="approvedBanner"
+            class="approved-banner"
+            role="status"
+            aria-live="polite"
+          >
             <i class="fas fa-circle-check"></i>
             <div class="approved-text">
               <strong>Claim approved by Car Company.</strong>
-              <span>This claim is now read-only. Document verification is disabled.</span>
+              <span
+                >This claim is now read-only. Document verification is
+                disabled.</span
+              >
             </div>
           </div>
-          <div id="rejectedBanner" class="rejected-banner" role="status" aria-live="polite">
+          <div
+            id="rejectedBanner"
+            class="rejected-banner"
+            role="status"
+            aria-live="polite"
+          >
             <i class="fas fa-times-circle"></i>
             <div class="rejected-text">
               <strong>Claim rejected by Car Company.</strong>
-              <span>This claim is now read-only. Document verification is disabled.</span>
+              <span
+                >This claim is now read-only. Document verification is
+                disabled.</span
+              >
             </div>
           </div>
           <div id="rejectionNotesDisplay" class="rejection-notes-display">
@@ -285,21 +303,20 @@
         <i class="fas fa-check-circle"></i>
         <span>Approve</span>
       </button>
-      <button
-        id="rejectClaimBtn"
-        type="button"
-        class="btn-danger decision-btn"
-      >
+      <button id="rejectClaimBtn" type="button" class="btn-danger decision-btn">
         <i class="fas fa-times-circle"></i>
         <span>Reject</span>
       </button>
-  </div>
+    </div>
 
     <!-- Approval Confirmation Modal -->
     <div id="approvalConfirmModal" class="modal">
       <div class="modal-content confirm">
         <div class="modal-header">
-          <h3><i class="fas fa-triangle-exclamation warn-icon"></i> Confirm Approval</h3>
+          <h3>
+            <i class="fas fa-triangle-exclamation warn-icon"></i> Confirm
+            Approval
+          </h3>
           <span class="close" onclick="closeApprovalConfirm()">&times;</span>
         </div>
         <div class="modal-body">
@@ -308,7 +325,11 @@
             <p>Approve claim?</p>
           </div>
           <div class="confirm-actions">
-            <button type="button" class="btn-secondary" onclick="closeApprovalConfirm()">
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeApprovalConfirm()"
+            >
               Cancel
             </button>
             <button type="button" id="confirmApproveBtn" class="btn-success">
@@ -323,12 +344,17 @@
     <div id="rejectionModal" class="modal">
       <div class="modal-content confirm">
         <div class="modal-header">
-          <h3><i class="fas fa-times-circle" style="color: #ef4444;"></i> Reject Claim</h3>
+          <h3>
+            <i class="fas fa-times-circle" style="color: #ef4444"></i> Reject
+            Claim
+          </h3>
           <span class="close" onclick="closeRejectionModal()">&times;</span>
         </div>
         <div class="modal-body">
           <div class="confirm-body">
-            <p class="confirm-title" style="color: #dc2626;">Please provide a reason for rejection</p>
+            <p class="confirm-title" style="color: #dc2626">
+              Please provide a reason for rejection
+            </p>
             <p>This information will be sent to the claim owner.</p>
           </div>
           <div class="rejection-notes-container">
@@ -341,7 +367,11 @@
             ></textarea>
           </div>
           <div class="confirm-actions">
-            <button type="button" class="btn-secondary" onclick="closeRejectionModal()">
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeRejectionModal()"
+            >
               Cancel
             </button>
             <button type="button" id="confirmRejectBtn" class="btn-danger">
@@ -352,8 +382,13 @@
       </div>
     </div>
 
-      <!-- Toast notifications -->
-      <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <!-- Toast notifications -->
+    <div
+      id="toastContainer"
+      class="toast-container"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
 
     <script src="app.js"></script>
   </body>

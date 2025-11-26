@@ -195,68 +195,13 @@ function setupEventListeners() {
     addEventListenerSafely('holdClaimBtn', 'click', function() { decideClaim('under_review'); });
 }
 
-function showDecisionModal(action) {
-    if (!currentClaim) return;
-    const approvalModal = document.getElementById('approvalModal');
-    const confirmBtn = document.getElementById('confirmApproval');
-    // store action on the confirm button for handling
-    confirmBtn.dataset.action = action;
-
-    // update modal copy
-    const title = approvalModal.querySelector('.modal-header h3');
-    const desc = approvalModal.querySelector('.approval-confirmation p');
-    if (action === 'reject') {
-        title.innerHTML = '<i class="fas fa-times-circle"></i> Reject Claim';
-        desc.textContent = 'Are you sure you want to reject this claim? This will mark the claim as rejected.';
-    } else if (action === 'hold') {
-        title.innerHTML = '<i class="fas fa-pause-circle"></i> Hold Claim';
-        desc.textContent = 'Put this claim on hold (mark as under_review). You can resume later.';
-    }
-
-    // show modal
-    approvalModal.style.display = 'flex';
-}
-
 // override confirmApproval handler to dispatch based on chosen action
 const originalApproveClaim = approveClaim;
 document.addEventListener('DOMContentLoaded', () => {
     const confirmBtn = document.getElementById('confirmApproval');
     if (confirmBtn) {
         confirmBtn.addEventListener('click', async function() {
-            const action = this.dataset.action || 'approve';
-            if (action === 'approve') {
-                // perform the normal insurance approval
-                await originalApproveClaim();
-
-                // attempt to notify the claim owner about the approval
-                (async () => {
-                    try {
-                        const { data: claimData, error: claimErr } = await supabase
-                            .from('claims')
-                            .select('user_id, claim_number')
-                            .eq('id', currentClaim)
-                            .single();
-                        const userId = claimData && claimData.user_id ? claimData.user_id : null;
-                        const claimNumber = claimData && claimData.claim_number ? claimData.claim_number : currentClaim;
-                        if (userId) {
-                            await sendNotifToUser(userId, 'Claim Approved', `Your claim ${claimNumber} has been approved.`, 'approved');
-                        } else {
-                            console.warn('confirmApproval: could not determine user_id to notify (approve)');
-                        }
-                    } catch (e) {
-                        console.warn('confirmApproval: error resolving claim user_id for approve notification', e);
-                    }
-                })();
-
-            } else if (action === 'reject') {
-                // Use decideClaim which handles DB update + notification for car company decisions
-                await decideClaim('rejected');
-            } else if (action === 'hold') {
-                await decideClaim('under_review');
-            }
-            // clear action and close modal
-            this.dataset.action = '';
-            closeApprovalModal();
+            await approveClaim();
         });
     }
 });
@@ -290,7 +235,6 @@ async function performClaimAction(status, extraFields = {}) {
 }
 
 
-// Decision helper for Car Company (approve/reject/under_review)
 async function decideClaim(decision, notes = '') {
     if (!currentClaim) {
         showError('No claim selected');
@@ -301,55 +245,46 @@ async function decideClaim(decision, notes = '') {
         const updateData = {};
         if (decision === 'approved') {
             updateData.status = 'approved';
-            // Mark claim as approved by car company
-            updateData.is_approved_by_car_company = true;
+            updateData.is_approved_by_insurance_company = true;
+            updateData.insurance_company_approval_date = new Date().toISOString();
             if (notes) updateData.insurance_company_approval_notes = notes;
 
-            // Notify claim owner (resolve user id then send)
+            // Notify claim owner
             (async () => {
                 try {
-                    const { data: claimData, error: claimErr } = await supabase
+                    const { data: claimData } = await supabase
                         .from('claims')
                         .select('user_id, claim_number')
                         .eq('id', currentClaim)
                         .single();
-                    const userId = claimData && claimData.user_id ? claimData.user_id : null;
-                    const claimNumber = claimData && claimData.claim_number ? claimData.claim_number : currentClaim;
-                    if (userId) {
-                        sendNotifToUser(userId, 'Claim Approved', `Your claim ${claimNumber} has been approved by the Car Company.`, 'approved');
-                    } else {
-                        console.warn('decideClaim: could not determine user_id to notify (approved)');
+                    if (claimData?.user_id) {
+                        sendNotifToUser(claimData.user_id, 'Claim Approved', `Your claim ${claimData.claim_number} has been approved by the Insurance Company.`, 'approved');
                     }
                 } catch (e) {
-                    console.warn('decideClaim: error resolving claim user_id for approved notification', e);
+                    console.warn('Error sending notification:', e);
                 }
             })();
 
         } else if (decision === 'rejected') {
             updateData.status = 'rejected';
-            // mark as not approved by car company
-            updateData.is_approved_by_car_company = false;
+            updateData.is_approved_by_insurance_company = false;
             if (notes) updateData.insurance_company_approval_notes = notes;
 
             (async () => {
                 try {
-                    const { data: claimData, error: claimErr } = await supabase
+                    const { data: claimData } = await supabase
                         .from('claims')
                         .select('user_id, claim_number')
                         .eq('id', currentClaim)
                         .single();
-                    const userId = claimData && claimData.user_id ? claimData.user_id : null;
-                    const claimNumber = claimData && claimData.claim_number ? claimData.claim_number : currentClaim;
-                    if (userId) {
+                    if (claimData?.user_id) {
                         const message = notes 
-                            ? `Your claim ${claimNumber} has been rejected by the Insurance Company. \n\nReason: \n${notes}`
-                            : `Your claim ${claimNumber} has been rejected by the Insurance Company. Please contact support for details.`;
-                        sendNotifToUser(userId, 'Claim Rejected', message, 'rejected');
-                    } else {
-                        console.warn('decideClaim: could not determine user_id to notify (rejected)');
+                            ? `Your claim ${claimData.claim_number} has been rejected by the Insurance Company. \n\nReason: \n${notes}`
+                            : `Your claim ${claimData.claim_number} has been rejected by the Insurance Company.`;
+                        sendNotifToUser(claimData.user_id, 'Claim Rejected', message, 'rejected');
                     }
                 } catch (e) {
-                    console.warn('decideClaim: error resolving claim user_id for rejected notification', e);
+                    console.warn('Error sending notification:', e);
                 }
             })();
 
@@ -359,23 +294,18 @@ async function decideClaim(decision, notes = '') {
 
             (async () => {
                 try {
-                    const { data: claimData, error: claimErr } = await supabase
+                    const { data: claimData } = await supabase
                         .from('claims')
                         .select('user_id, claim_number')
                         .eq('id', currentClaim)
                         .single();
-                    const userId = claimData && claimData.user_id ? claimData.user_id : null;
-                    const claimNumber = claimData && claimData.claim_number ? claimData.claim_number : currentClaim;
-                    if (userId) {
-                        sendNotifToUser(userId, 'Claim Under Review', `Your claim ${claimNumber} is marked as Under Review by the Car Company. We will get back to you soon.`, 'review');
-                    } else {
-                        console.warn('decideClaim: could not determine user_id to notify (under_review)');
+                    if (claimData?.user_id) {
+                        sendNotifToUser(claimData.user_id, 'Claim Under Review', `Your claim ${claimData.claim_number} is marked as Under Review by the Insurance Company.`, 'review');
                     }
                 } catch (e) {
-                    console.warn('decideClaim: error resolving claim user_id for under_review notification', e);
+                    console.warn('Error sending notification:', e);
                 }
             })();
-            // Do not change verified flag on hold
         }
 
         const { error } = await supabase
@@ -389,9 +319,10 @@ async function decideClaim(decision, notes = '') {
             return;
         }
 
-        // Update UI: hide decision actions and redirect to home
-        const decisionActionsEl = document.getElementById('claimDecisionActions');
-        if (decisionActionsEl) decisionActionsEl.style.display = 'none';
+        // Update UI
+        const actionsRow = document.getElementById('approvalActionsRow');
+        if (actionsRow) actionsRow.style.display = 'none';
+        
         showSuccess(decision === 'approved' ? 'Claim approved' : decision === 'rejected' ? 'Claim rejected' : 'Claim marked as Under Review');
         
         // Redirect to home after decision
@@ -573,7 +504,7 @@ function displayClaims(claims) {
     }
 
     tableBody.innerHTML = claims.map(claim => `
-        <tr class="claim-row ${((claim.is_approved_by_insurance_company || claim.status === 'approved') ? 'approved-row' : '')}" data-claim-id="${claim.id}">
+        <tr class="claim-row ${((claim.is_approved_by_insurance_company || claim.status === 'approved') ? 'approved-row' : (claim.status === 'rejected' ? 'rejected-row' : ''))}" data-claim-id="${claim.id}">
             <td>
                 <strong>${claim.claim_number}</strong>
             </td>
@@ -605,16 +536,6 @@ function displayClaims(claims) {
                 </div>
             </td>
             <td>
-                <div class="verification-status">
-                    ${claim.status === 'rejected' ? 
-                        '<i class="fas fa-times-circle text-danger"></i> Rejected' : 
-                        (claim.is_approved_by_insurance_company || claim.status === 'approved') ? 
-                        '<i class="fas fa-check-circle text-success"></i> Verified' : 
-                        '<i class="fas fa-clock text-warning"></i> Pending'
-                    }
-                </div>
-            </td>
-            <td>
                 <span class="doc-count">${claim.totalInsuranceDocs}</span>
             </td>
             <td>
@@ -624,6 +545,11 @@ function displayClaims(claims) {
             </td>
             <td>
                 <span class="date">${formatDate(claim.created_at)}</span>
+            </td>
+            <td>
+                <button class="btn-primary btn-sm" onclick="viewClaimDocuments('${claim.id}')">
+                    <i class="fas fa-eye"></i> View Documents
+                </button>
             </td>
         </tr>
     `).join('');
@@ -716,68 +642,38 @@ async function loadClaimDocuments(claimId) {
         document.getElementById('claimDescription').textContent = 
             `Documents for ${claim.users?.name || 'Unknown User'} - Insurance Verification & Approval`;
 
-        // Populate the User Summary card (above the incident details)
+        // Populate vehicle summary (replacing user/incident cards)
         try {
-            const userNameEl = document.getElementById('userName');
-            const userEmailEl = document.getElementById('userEmail');
-            const userPhoneEl = document.getElementById('userPhone');
+            // Prefer vehicle fields stored on the claim record
+            const vehicleMake = claim.vehicle_make || null;
+            const vehicleModel = claim.vehicle_model || null;
+            const vehicleYear = claim.vehicle_year || null;
+            const vehiclePlate = claim.vehicle_plate_number || null;
 
-            // Prefer joined user data if present
-            let user = claim.users || null;
-
-            // If we don't have full user info (or phone is missing), fetch from users table using user_id
-            if ((!user || !user.email || !user.name || !user.phone) && claim.user_id) {
-                try {
-                    const { data: fullUser, error: userErr } = await supabase
-                        .from('users')
-                        .select('id, name, email, phone, phone_number, mobile, contact_number')
-                        .eq('id', claim.user_id)
-                        .single();
-
-                    if (!userErr && fullUser) {
-                        // normalize field names onto `user`
-                        user = {
-                            id: fullUser.id,
-                            name: fullUser.name,
-                            email: fullUser.email,
-                            phone: fullUser.phone || fullUser.phone_number || fullUser.mobile || fullUser.contact_number || null
-                        };
-                    }
-                } catch (e) {
-                    console.warn('Error fetching full user by user_id:', e);
+            document.getElementById('summaryClaim').textContent = `Claim ${claim.claim_number}`;
+            document.getElementById('summaryUser').textContent = `${claim.users?.name || 'Unknown User'} · ${claim.users?.email || ''}`;
+            
+            // Update status pill
+            const pill = document.getElementById('statusPill');
+            if (pill) {
+                if (claim.status === 'under_review') {
+                    pill.textContent = 'In Review';
+                    pill.className = 'status-pill status-under_review';
+                } else {
+                    const normalized = (claim.status || 'draft').toLowerCase();
+                    pill.textContent = formatStatus(normalized);
+                    pill.className = 'status-pill status-' + normalized.replace(/\s+/g, '_');
                 }
+                pill.style.textTransform = 'none';
+                pill.style.display = '';
             }
 
-            const phone = user ? (user.phone || user.phone_number || user.mobile || user.contact_number || '-') : '-';
-
-            if (userNameEl) userNameEl.textContent = user && user.name ? user.name : '-';
-            if (userEmailEl) userEmailEl.textContent = user && user.email ? user.email : '-';
-            if (userPhoneEl) userPhoneEl.textContent = phone || '-';
+            document.getElementById('summaryMake').textContent = vehicleMake || '-';
+            document.getElementById('summaryModel').textContent = vehicleModel || '-';
+            document.getElementById('summaryYear').textContent = vehicleYear || '-';
+            document.getElementById('summaryPlate').textContent = vehiclePlate || '-';
         } catch (err) {
-            console.warn('Could not populate user summary card:', err);
-        }
-
-        // Populate the Incident Details card (below the approval section)
-        try {
-            const incidentIdEl = document.getElementById('incidentId');
-            const incidentDateCardEl = document.getElementById('incidentDateCard');
-            const incidentPlaceCardEl = document.getElementById('incidentPlaceCard');
-            const incidentStatusCardEl = document.getElementById('incidentStatusCard');
-            const incidentDescriptionCardEl = document.getElementById('incidentDescriptionCard');
-            const incidentEstimatedCostEl = document.getElementById('incidentEstimatedCost');
-
-            if (incidentIdEl) incidentIdEl.textContent = claim.claim_number || claim.id || '-';
-            if (incidentDateCardEl) incidentDateCardEl.textContent = claim.incident_date ? formatDate(claim.incident_date) : '-';
-            if (incidentPlaceCardEl) incidentPlaceCardEl.textContent = claim.incident_location || '-';
-            if (incidentStatusCardEl) incidentStatusCardEl.textContent = claim.status ? formatStatus(claim.status) : '-';
-            if (incidentDescriptionCardEl) incidentDescriptionCardEl.textContent = claim.incident_description || '-';
-            // Estimated cost - prefer explicit field names that may exist on the claim
-            // Common field names: estimated_cost, estimatedRepairCost, estimated_repair_cost
-            const costValue = claim.estimated_cost ?? claim.estimatedRepairCost ?? claim.estimated_repair_cost ?? claim.estimated_damage_cost ?? null;
-            if (incidentEstimatedCostEl) incidentEstimatedCostEl.textContent = costValue !== null && costValue !== undefined ? formatCurrency(costValue) : '-';
-        } catch (err) {
-            // Non-fatal - if elements are missing just log
-            console.warn('Could not populate incident details card:', err);
+            console.warn('Could not populate vehicle summary:', err);
         }
 
         // Fetch all documents for this claim
@@ -950,16 +846,22 @@ async function viewDocument(documentId, canVerify) {
     document.getElementById('docUploadDate').textContent = formatDate(doc.created_at);
     document.getElementById('docStatus').textContent = formatStatus(doc.status);
 
-    // Incident information removed from document viewer modal; details are shown
-    // on the Documents page incident card instead.
+    // Populate vehicle information in modal
+    try {
+        const claim = currentClaimData || {};
+        document.getElementById('vehicleMake').textContent = claim.vehicle_make || '-';
+        document.getElementById('vehicleModel').textContent = claim.vehicle_model || '-';
+        document.getElementById('vehicleYear').textContent = claim.vehicle_year || '-';
+        document.getElementById('licensePlate').textContent = claim.vehicle_plate_number || '-';
+    } catch (e) {
+        console.warn('Error populating vehicle info in modal:', e);
+    }
 
     // Show/hide verification controls based on whether this document can be verified by insurance
     const verificationSection = document.getElementById('verificationSection');
-    const readonlyNotice = document.getElementById('readonlyNotice');
     
     if (canVerify && !currentClaimApproved) {
         verificationSection.style.display = 'block';
-        readonlyNotice.classList.remove('show');
         
         // Set verification status
         const verifyCheckbox = document.getElementById('verifyCheckbox');
@@ -970,7 +872,7 @@ async function viewDocument(documentId, canVerify) {
         document.getElementById('saveVerification').dataset.documentId = documentId;
         
         // Update checkbox label and button text based on verification status
-        const checkboxLabel = document.querySelector('.checkbox-label');
+        const checkboxLabel = document.querySelector('.label-text');
         const saveButton = document.getElementById('saveVerification');
         
         if (checkboxLabel) {
@@ -991,39 +893,10 @@ async function viewDocument(documentId, canVerify) {
         
     } else {
         verificationSection.style.display = 'none';
-        readonlyNotice.classList.add('show');
     }
 
     // Load document content
     await loadDocumentContent(doc);
-
-    // Set up action button handlers
-    const openInNewTabBtn = document.getElementById('openInNewTab');
-    const nextDocumentBtn = document.getElementById('nextDocument');
-    
-    if (openInNewTabBtn) {
-        openInNewTabBtn.onclick = () => {
-            if (doc.remote_url || doc.storage_path) {
-                window.open(doc.remote_url || doc.storage_path, '_blank');
-            } else {
-                showError('Document URL not available');
-            }
-        };
-    }
-    
-    if (nextDocumentBtn) {
-        nextDocumentBtn.onclick = () => {
-            // Find next document in the current documents array
-            const currentIndex = currentDocuments.findIndex(d => d.id === documentId);
-            const nextIndex = (currentIndex + 1) % currentDocuments.length;
-            const nextDoc = currentDocuments[nextIndex];
-            
-            if (nextDoc && nextDoc.id !== documentId) {
-                const canVerifyNext = INSURANCE_DOCUMENT_TYPES.includes(nextDoc.type);
-                viewDocument(nextDoc.id, canVerifyNext);
-            }
-        };
-    }
 
     // Show modal
     document.getElementById('documentViewerModal').style.display = 'flex';
@@ -1032,69 +905,81 @@ async function viewDocument(documentId, canVerify) {
 async function loadDocumentContent(doc) {
     const contentDiv = document.getElementById('documentContent');
     
-    if (!doc.remote_url && !doc.storage_path) {
-        contentDiv.innerHTML = `
-            <div class="default-document-preview">
-                <div class="document-placeholder">
-                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='250' fill='%23e2e8f0'%3E%3Crect width='200' height='250' fill='%23f7fafc'/%3E%3Cpath d='M50 30h100v20H50zm0 40h120v15H50zm0 30h80v15H50zm0 30h100v15H50z' fill='%23cbd5e0'/%3E%3C/svg%3E" alt="Document placeholder" class="document-placeholder-img">
-                    <div class="document-info-text">
-                        <p class="document-filename">${doc.file_name}</p>
-                        <p class="document-size">${formatFileSize(doc.file_size_bytes)}</p>
-                        <p style="color: #666; margin: 8px 0 0 0; font-size: 13px;">Document preview not available</p>
-                    </div>
-                </div>
-            </div>
-        `;
-        return;
-    }
-
+    // Show loading state briefly
+    contentDiv.innerHTML = `
+        <div class="document-preview loading-preview">
+            <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #667eea;"></i>
+            <p>Loading document...</p>
+        </div>
+    `;
+    
     try {
-        const fileUrl = doc.remote_url || doc.storage_path;
-        const fileFormat = doc.format ? doc.format.toLowerCase() : '';
+        const fileUrl = await getDocumentUrl(doc, { expiresIn: 3600 });
         
-        // Handle different document types
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileFormat)) {
-            // Image documents - use the new layout style
+        if (!fileUrl) {
             contentDiv.innerHTML = `
-                <div class="image-preview">
+                <div class="no-preview">
+                    <i class="fas fa-file"></i>
+                    <p>Document URL not available</p>
+                    <p>File: ${doc.file_name}</p>
+                </div>
+            `;
+            return;
+        }
+
+        const fileExtension = getFileExtension(doc.file_name);
+        
+        if (isImageFile(fileExtension)) {
+            // Display image directly
+            contentDiv.innerHTML = `
+                <div class="document-preview image-preview">
                     <img src="${fileUrl}" alt="${doc.file_name}" 
-                         style="max-width: 100%; max-height: 500px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"
-                         onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'error-preview\\'><i class=\\'fas fa-exclamation-triangle\\'></i><p>Failed to load image</p><div class=\\'document-info-text\\'><p class=\\'document-filename\\'>${doc.file_name}</p><p class=\\'document-size\\'>${formatFileSize(doc.file_size_bytes)}</p></div></div>';">
+                         style="max-width: 100%; max-height: 600px; object-fit: contain; opacity: 0; transition: opacity 0.3s;"
+                         onload="this.style.opacity='1'" 
+                         onerror="this.parentElement.innerHTML='<div class=\\'error-preview\\'><i class=\\'fas fa-exclamation-triangle\\'></i><p>Failed to load image</p></div>';" />
                     <div class="image-info">
-                        <p class="file-info">${doc.file_name}</p>
+                        <p class="file-name">${doc.file_name}</p>
                         <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
+                        <button onclick="openDocumentInNewTab('${doc.id}')" class="btn-secondary">
+                            <i class="fas fa-external-link-alt"></i> Open in New Tab
+                        </button>
                     </div>
                 </div>
             `;
-        } else if (fileFormat === 'pdf') {
-            // PDF documents
+        } else if (fileExtension === 'pdf') {
+            // Display PDF using iframe
             contentDiv.innerHTML = `
-                <div class="pdf-preview">
-                    <embed src="${fileUrl}" type="application/pdf" 
-                           style="width: 100%; height: 500px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                    <div class="pdf-fallback">
-                        <p class="file-info">${doc.file_name}</p>
+                <div class="document-preview pdf-preview">
+                    <iframe src="${fileUrl}" 
+                            style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 8px;"
+                            title="PDF Viewer - ${doc.file_name}">
+                        <p>Your browser doesn't support PDF viewing. 
+                           <a href="javascript:void(0)" onclick="openDocumentInNewTab('${doc.id}')">Click here to open PDF</a>
+                        </p>
+                    </iframe>
+                    <div class="pdf-info">
+                        <p class="file-name">${doc.file_name}</p>
                         <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
-                        <a href="${fileUrl}" target="_blank" class="btn-primary">
-                            <i class="fas fa-external-link-alt"></i> Open PDF in New Tab
-                        </a>
+                        <button onclick="openDocumentInNewTab('${doc.id}')" class="btn-secondary">
+                            <i class="fas fa-external-link-alt"></i> Open in New Tab
+                        </button>
                     </div>
                 </div>
             `;
         } else {
-            // Other document types or fallback with placeholder
+            // Show file info for other types
             contentDiv.innerHTML = `
-                <div class="default-document-preview">
-                    <div class="document-placeholder">
-                        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='250' fill='%23e2e8f0'%3E%3Crect width='200' height='250' fill='%23f7fafc'/%3E%3Cpath d='M50 30h100v20H50zm0 40h120v15H50zm0 30h80v15H50zm0 30h100v15H50z' fill='%23cbd5e0'/%3E%3C/svg%3E" alt="Document placeholder" class="document-placeholder-img">
-                        <div class="document-info-text">
-                            <p class="document-filename">${doc.file_name}</p>
-                            <p class="document-size">${formatFileSize(doc.file_size_bytes)}</p>
-                            <p style="color: #666; margin: 8px 0 0 0; font-size: 13px;">Preview not available for this file type</p>
-                            <a href="${fileUrl}" target="_blank" class="btn-primary" style="margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 8px 16px;">
-                                <i class="fas fa-download"></i> Download & View
-                            </a>
-                        </div>
+                <div class="document-preview file-preview">
+                    <div class="file-icon">
+                        <i class="fas fa-file-${getFileTypeIcon(fileExtension)}"></i>
+                    </div>
+                    <div class="file-details">
+                        <p class="file-name">${doc.file_name}</p>
+                        <p class="file-size">${formatFileSize(doc.file_size_bytes)}</p>
+                        <p class="file-type">Type: ${fileExtension.toUpperCase()}</p>
+                        <button onclick="openDocumentInNewTab('${doc.id}')" class="btn-secondary">
+                            <i class="fas fa-download"></i> Download / Open
+                        </button>
                     </div>
                 </div>
             `;
@@ -1105,11 +990,8 @@ async function loadDocumentContent(doc) {
         contentDiv.innerHTML = `
             <div class="error-preview">
                 <i class="fas fa-exclamation-triangle"></i>
-                <p>Error loading document preview</p>
-                <div class="document-info-text">
-                    <p class="document-filename">${doc.file_name}</p>
-                    <p class="document-size">${formatFileSize(doc.file_size_bytes)}</p>
-                </div>
+                <p>Error loading document</p>
+                <p class="error-details">${error.message}</p>
             </div>
         `;
     }
@@ -1251,7 +1133,8 @@ function applyApprovedState() {
         if (saveBtn) saveBtn.disabled = true;
     } else {
         if (docsPage) docsPage.classList.remove('view-only');
-        if (actionsRow) actionsRow.style.display = 'flex';
+        // Visibility is handled by updateApprovalButtonStatus
+        // if (actionsRow) actionsRow.style.display = 'flex';
         const checkbox = document.getElementById('verifyCheckbox');
         const saveBtn = document.getElementById('saveVerification');
         if (checkbox) checkbox.disabled = false;
@@ -1261,107 +1144,59 @@ function applyApprovedState() {
 
 function updateApprovalButtonStatus(insuranceDocuments) {
     const approveBtn = document.getElementById('approveClaimBtn');
-    const approvalStatus = document.getElementById('approvalStatus');
     const approvalActionsRow = document.getElementById('approvalActionsRow');
-    
-    // Always show the action buttons when documents are loaded
-    if (approvalActionsRow) {
-        approvalActionsRow.style.display = 'flex';
-    }
     
     const allVerified = insuranceDocuments.length > 0 && 
         insuranceDocuments.every(doc => doc.verified_by_insurance_company);
     
+    // Show the action buttons as long as the claim is not approved/rejected
+    if (approvalActionsRow) {
+        if (!currentClaimApproved) {
+            approvalActionsRow.style.display = 'flex';
+        } else {
+            approvalActionsRow.style.display = 'none';
+        }
+    }
+    
     if (allVerified) {
         approveBtn.disabled = false;
         approveBtn.classList.add('ready');
-        approvalStatus.innerHTML = `
-            <div class="status-indicator ready">
-                <i class="fas fa-check-circle"></i>
-                <span>Ready for approval - All documents verified</span>
-            </div>
-        `;
     } else {
         approveBtn.disabled = true;
         approveBtn.classList.remove('ready');
-        const pending = insuranceDocuments.filter(doc => !doc.verified_by_insurance_company).length;
-        approvalStatus.innerHTML = `
-            <div class="status-indicator">
-                <i class="fas fa-clock"></i>
-                <span>${pending} documents pending verification</span>
-            </div>
-        `;
     }
 }
 
 function showApprovalModal() {
     if (!currentClaim) return;
-    
-    // Get claim details for summary
-    const claimSummary = document.getElementById('claimSummary');
-    // Try to determine estimated cost from loaded claim data; fallback to dash
-    let estimatedCostDisplay = '-';
-    try {
-        const claim = currentClaimData || {};
-        const rawCost = claim.estimated_cost ?? claim.estimatedRepairCost ?? claim.estimated_repair_cost ?? claim.estimated_damage_cost ?? null;
-        if (rawCost !== null && rawCost !== undefined && rawCost !== '') {
-            estimatedCostDisplay = formatCurrency(rawCost);
+
+    // Populate summary
+    if (currentClaimData) {
+        const summaryClaimNumber = document.getElementById('summaryClaimNumber');
+        if (summaryClaimNumber) {
+            summaryClaimNumber.textContent = currentClaimData.claim_number || '-';
         }
-    } catch (e) {
-        console.warn('Could not determine estimated cost for approval modal', e);
+        
+        const summaryVehicle = document.getElementById('summaryVehicle');
+        if (summaryVehicle) {
+            const vehicle = [
+                currentClaimData.vehicle_year, 
+                currentClaimData.vehicle_make, 
+                currentClaimData.vehicle_model
+            ].filter(Boolean).join(' ') || '-';
+            summaryVehicle.textContent = vehicle;
+        }
+        
+        const summaryTotalCost = document.getElementById('summaryTotalCost');
+        if (summaryTotalCost) {
+            // Use the specific column name provided by the user
+            const cost = currentClaimData.estimated_damage_cost || 0;
+                         
+            summaryTotalCost.textContent = formatCurrency(cost);
+        }
     }
 
-    claimSummary.innerHTML = `
-        <div class="summary-row">
-            <div class="summary-label">Claim:</div>
-            <div class="summary-value">${document.getElementById('claimTitle').textContent}</div>
-        </div>
-        <div class="summary-row">
-            <div class="summary-label">Total Documents:</div>
-            <div class="summary-value">${document.getElementById('totalDocs').textContent}</div>
-        </div>
-        <div class="summary-row">
-            <div class="summary-label">Insurance Verified:</div>
-            <div class="summary-value">${document.getElementById('insuranceVerifiedDocs').textContent}</div>
-        </div>
-        <div class="summary-row">
-            <div class="summary-label">Car Company Verified:</div>
-            <div class="summary-value">${document.getElementById('carVerifiedDocs').textContent}</div>
-        </div>
-        <div class="summary-row">
-            <div class="summary-label">Estimated Cost:</div>
-            <div class="summary-value">${estimatedCostDisplay}</div>
-        </div>
-    `;
-    
     document.getElementById('approvalModal').style.display = 'flex';
-
-    // Wire up validation for the inline cost input so approvers can't submit invalid values
-    const confirmBtn = document.getElementById('confirmApproval');
-    const costInputEl = document.getElementById('approvalEstimatedCostInput');
-    function validateCostAndToggle() {
-        if (!costInputEl) return;
-        const raw = costInputEl.value.trim();
-        if (raw === '') {
-            // empty is allowed — treat as no change
-            confirmBtn.disabled = false;
-            return;
-        }
-        const parsed = parseCurrency(raw);
-        if (Number.isNaN(parsed)) {
-            confirmBtn.disabled = true;
-            costInputEl.style.borderColor = 'rgba(255,0,0,0.6)';
-        } else {
-            confirmBtn.disabled = false;
-            costInputEl.style.borderColor = '';
-        }
-    }
-
-    if (costInputEl) {
-        costInputEl.addEventListener('input', validateCostAndToggle);
-        // initial validation
-        setTimeout(validateCostAndToggle, 0);
-    }
 }
 
 async function approveClaim() {
@@ -1629,5 +1464,97 @@ function notify(type, title, message, timeout = 4000) {
             }, timeout);
         }
     } catch (e) { console.warn('notify error', e); }
+}
+
+// Helper functions for document URL handling
+function getFileExtension(filename) {
+    return filename.split('.').pop().toLowerCase();
+}
+
+function isImageFile(extension) {
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+    return imageExtensions.includes(extension);
+}
+
+function parseStorageUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+    try {
+        const u = new URL(url);
+        const pathname = u.pathname;
+        const parts = pathname.split('/').filter(Boolean);
+        const idx = parts.findIndex(p => p === 'object');
+        if (idx === -1 || parts.length < idx + 3) return null;
+        const kind = parts[idx + 1];
+        let bucket, objectPath;
+        if (kind === 'public' || kind === 'sign') {
+            bucket = parts[idx + 2];
+            objectPath = parts.slice(idx + 3).join('/');
+        } else {
+            bucket = parts[idx + 1];
+            objectPath = parts.slice(idx + 2).join('/');
+        }
+        if (!bucket || !objectPath) return null;
+        return { bucket, path: objectPath };
+    } catch (_) {
+        return null;
+    }
+}
+
+function getDocumentUrl(doc, options = {}) {
+    const { expiresIn = 3600, forceSigned = false } = options;
+    return (async function() {
+        const initialUrl = doc.remote_url || doc.url || null;
+        if (initialUrl && !forceSigned) {
+            const looksSigned = /[?&]token=/.test(initialUrl) || /\/storage\/v1\/object\/sign\//.test(initialUrl);
+            if (!looksSigned) {
+                try {
+                    const resp = await fetch(initialUrl, { method: 'HEAD' });
+                    if (resp.ok) return initialUrl;
+                    if (resp.status !== 401 && resp.status !== 403) return initialUrl;
+                } catch (err) { }
+            }
+        }
+
+        let objectPath = doc.file_path || doc.path || doc.filePath || null;
+        let bucketName = doc.bucket || 'insurevis-documents';
+        if (!objectPath && initialUrl) {
+            const parsed = parseStorageUrl(initialUrl);
+            if (parsed) {
+                bucketName = parsed.bucket || bucketName;
+                objectPath = parsed.path;
+            }
+        }
+
+        if (objectPath && typeof supabase !== 'undefined') {
+            try {
+                const { data, error } = await supabase.storage
+                    .from(bucketName)
+                    .createSignedUrl(objectPath, expiresIn);
+
+                if (data && data.signedUrl) return data.signedUrl;
+            } catch (err) {
+                console.error('Error creating signed URL:', err);
+            }
+        }
+        return initialUrl;
+    })();
+}
+
+async function openDocumentInNewTab(documentId) {
+    try {
+        const doc = currentDocuments.find(d => d.id === documentId);
+        if (!doc) return;
+        const freshUrl = await getDocumentUrl(doc, { expiresIn: 3600, forceSigned: true });
+        if (freshUrl) {
+            window.open(freshUrl, '_blank', 'noopener');
+        } else if (doc.remote_url) {
+            window.open(doc.remote_url, '_blank', 'noopener');
+        } else {
+            showError('Unable to generate URL for this document.');
+        }
+    } catch (e) {
+        console.error('openDocumentInNewTab error:', e);
+        showError('Failed to open document: ' + (e.message || e));
+    }
 }
 

@@ -495,22 +495,6 @@ function displayClaims(claims) {
                 })()}
             </td>
             <td>
-                <div class="verification-status">
-                    ${(() => {
-                        const carStatus = claim.car_company_status || 'pending';
-                        if (carStatus === 'approved') {
-                            return '<i class="fas fa-check-circle text-success"></i> Approved';
-                        } else if (carStatus === 'rejected') {
-                            return '<i class="fas fa-times-circle text-danger"></i> Rejected';
-                        } else if (carStatus === 'under_review') {
-                            return '<i class="fas fa-hourglass-half text-info"></i> Under Review';
-                        } else {
-                            return '<i class="fas fa-clock text-warning"></i> Pending';
-                        }
-                    })()}
-                </div>
-            </td>
-            <td>
                 <span class="doc-count">${claim.totalCarCompanyDocs}</span>
             </td>
             <td>
@@ -700,7 +684,7 @@ function updateDocumentStats(documents) {
     if (decisionActions) {
         const isClaimOpen = !!currentClaim;
         const allVerified = total > 0 && verified === total;
-        if (isClaimOpen && allVerified) {
+        if (isClaimOpen && allVerified && !currentClaimApproved) {
             decisionActions.style.display = 'flex';
         } else {
             decisionActions.style.display = 'none';
@@ -1306,20 +1290,32 @@ async function saveDocumentVerification() {
         // docs are verified, revert it here. Only revert if the claim is not in a
         // final approved/submitted state (those are set explicitly via Approve).
         try {
+            // Wait a moment for any DB triggers to fire
+            await new Promise(r => setTimeout(r, 500));
+
             const allDocsVerified = Array.isArray(currentDocuments) && currentDocuments.length > 0 && currentDocuments.every(d => !!d.verified_by_car_company);
             if (currentClaim && allDocsVerified) {
                 const { data: claimRow, error: claimFetchErr } = await supabase
                     .from('claims')
-                    .select('is_approved_by_car_company, status')
+                    .select('is_approved_by_car_company, status, car_company_status')
                     .eq('id', currentClaim)
                     .single();
-                if (!claimFetchErr && claimRow && claimRow.is_approved_by_car_company === true) {
-                    const status = (claimRow.status || '').toLowerCase();
+                
+                if (!claimFetchErr && claimRow) {
+                    // Check if it was auto-approved (either flag or status column)
+                    const isAutoApproved = claimRow.is_approved_by_car_company === true || claimRow.car_company_status === 'approved';
+                    const globalStatus = (claimRow.status || '').toLowerCase();
+                    
                     // Don't revert if claim was explicitly moved to submitted/approved via Approve button
-                    if (status !== 'submitted' && status !== 'approved') {
+                    // (Though we are in saveDocumentVerification, so explicit approval shouldn't have happened yet)
+                    if (isAutoApproved && globalStatus !== 'submitted' && globalStatus !== 'approved') {
+                        console.log('🛡️ Safety guard: Reverting auto-approval of claim');
                         await supabase
                             .from('claims')
-                            .update({ is_approved_by_car_company: false })
+                            .update({ 
+                                is_approved_by_car_company: false,
+                                car_company_status: 'pending' 
+                            })
                             .eq('id', currentClaim);
                     }
                 }
