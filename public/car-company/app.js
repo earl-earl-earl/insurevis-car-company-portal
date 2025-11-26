@@ -341,7 +341,15 @@ function setupEventListeners() {
     }
     
     // Document verification
-    document.getElementById('saveVerification').addEventListener('click', saveDocumentVerification);
+    // document.getElementById('saveVerification').addEventListener('click', saveDocumentVerification); // Removed
+    
+    // Batch Verification Navigation
+    document.getElementById('prevDocBtn').addEventListener('click', () => navigateDocument(-1));
+    document.getElementById('nextDocBtn').addEventListener('click', () => navigateDocument(1));
+    
+    // Verification Actions
+    document.getElementById('verifyDocBtn').addEventListener('click', () => handleDocumentDecision('verify'));
+    document.getElementById('rejectDocBtn').addEventListener('click', () => handleDocumentDecision('reject'));
 
     // Claim decision buttons (approve/reject)
     setupClaimDecisionButtons();
@@ -941,7 +949,9 @@ function displayDocuments(documents) {
 async function viewDocument(documentId) {
     console.log('🔍 ViewDocument called with ID:', documentId);
     
-    const doc = currentDocuments.find(doc => doc.id === documentId);
+    const docIndex = currentDocuments.findIndex(doc => doc.id === documentId);
+    const doc = currentDocuments[docIndex];
+
     if (!doc) {
         console.error('❌ Document not found:', documentId);
         showError('Document not found');
@@ -966,28 +976,54 @@ async function viewDocument(documentId) {
     // Populate vehicle information (this would normally come from the claim or document data)
     await populateVehicleInformation(currentClaim, doc);
 
-    // Set verification status
-    const verifyCheckbox = document.getElementById('verifyCheckbox');
+    // --- NEW LOGIC START ---
     
-    verifyCheckbox.checked = doc.verified_by_car_company;
+    // Update Navigation Buttons
+    const prevBtn = document.getElementById('prevDocBtn');
+    const nextBtn = document.getElementById('nextDocBtn');
+    
+    if (prevBtn) prevBtn.disabled = docIndex === 0;
+    if (nextBtn) nextBtn.disabled = docIndex === currentDocuments.length - 1;
+    
+    // Update Verification Buttons State
+    const verifyBtn = document.getElementById('verifyDocBtn');
+    const rejectBtn = document.getElementById('rejectDocBtn');
+    
+    if (verifyBtn && rejectBtn) {
+        // Reset styles
+        verifyBtn.classList.remove('active-state');
+        rejectBtn.classList.remove('active-state');
+        verifyBtn.style.opacity = '1';
+        rejectBtn.style.opacity = '1';
 
-    // Respect approved state: make view-only if claim already approved
-    if (currentClaimApproved) {
-        verifyCheckbox.disabled = true;
-        const saveBtn = document.getElementById('saveVerification');
-        if (saveBtn) saveBtn.disabled = true;
-    } else {
-        verifyCheckbox.disabled = false;
-        const saveBtn = document.getElementById('saveVerification');
-        if (saveBtn) saveBtn.disabled = false;
+        if (doc.verified_by_car_company) {
+            verifyBtn.innerHTML = '<i class="fas fa-check-circle"></i> Verified';
+            verifyBtn.classList.add('btn-success');
+            verifyBtn.classList.remove('btn-outline-success');
+            rejectBtn.style.opacity = '0.5';
+        } else {
+            verifyBtn.innerHTML = '<i class="fas fa-check"></i> Verify';
+            // rejectBtn.style.opacity = '1';
+        }
+
+        // Handle Read-only state
+        if (currentClaimApproved) {
+            verifyBtn.disabled = true;
+            rejectBtn.disabled = true;
+        } else {
+            verifyBtn.disabled = false;
+            rejectBtn.disabled = false;
+        }
     }
+    
+    // Store current document ID for actions
+    document.getElementById('documentViewerModal').dataset.currentDocId = documentId;
+
+    // --- NEW LOGIC END ---
 
     // Load document content
     console.log('🔄 Loading document content...');
     await loadDocumentContent(doc);
-
-    // Store current document ID for saving
-    document.getElementById('saveVerification').dataset.documentId = documentId;
 
     // Show modal
     console.log('✅ Showing modal');
@@ -1233,19 +1269,30 @@ function isImageFile(extension) {
     return imageExtensions.includes(extension);
 }
 
-async function saveDocumentVerification() {
+function navigateDocument(direction) {
+    const currentDocId = document.getElementById('documentViewerModal').dataset.currentDocId;
+    const currentIndex = currentDocuments.findIndex(d => d.id === currentDocId);
+    
+    if (currentIndex === -1) return;
+    
+    const newIndex = currentIndex + direction;
+    
+    if (newIndex >= 0 && newIndex < currentDocuments.length) {
+        viewDocument(currentDocuments[newIndex].id);
+    }
+}
+
+async function handleDocumentDecision(decision) {
     if (currentClaimApproved) {
         showError('Claim is approved. Documents are view-only.');
         return;
     }
-    const documentId = document.getElementById('saveVerification').dataset.documentId;
-    const isVerified = document.getElementById('verifyCheckbox').checked;
-
-    if (!documentId) {
-        showError('No document selected');
-        return;
-    }
-
+    
+    const currentDocId = document.getElementById('documentViewerModal').dataset.currentDocId;
+    if (!currentDocId) return;
+    
+    const isVerified = decision === 'verify';
+    
     try {
         const updateData = {
             verified_by_car_company: isVerified
@@ -1260,7 +1307,7 @@ async function saveDocumentVerification() {
         const { error } = await supabase
             .from('documents')
             .update(updateData)
-            .eq('id', documentId);
+            .eq('id', currentDocId);
 
         if (error) {
             console.error('Error updating document verification:', error);
@@ -1268,8 +1315,8 @@ async function saveDocumentVerification() {
             return;
         }
 
-        // Update current documents array
-        const docIndex = currentDocuments.findIndex(doc => doc.id === documentId);
+        // Update local state
+        const docIndex = currentDocuments.findIndex(doc => doc.id === currentDocId);
         if (docIndex !== -1) {
             currentDocuments[docIndex] = { ...currentDocuments[docIndex], ...updateData };
         }
@@ -1328,9 +1375,6 @@ async function saveDocumentVerification() {
         updateDocumentStats(currentDocuments);
         displayDocuments(currentDocuments);
         
-        // Close modal
-        closeDocumentViewer();
-
         // Show success message
         showSuccess(isVerified ? 'Document verified successfully!' : 'Document verification removed');
 
@@ -1354,6 +1398,18 @@ async function saveDocumentVerification() {
             }
         } catch (btnErr) {
             console.warn('Could not refresh decision button state:', btnErr);
+        }
+        
+        // Auto-navigate to next document
+        // Only if we are not at the last document
+        const currentIndex = currentDocuments.findIndex(d => d.id === currentDocId);
+        if (currentIndex < currentDocuments.length - 1) {
+             setTimeout(() => {
+                navigateDocument(1);
+            }, 500);
+        } else {
+            // If last document, maybe refresh the current view to show updated status
+             viewDocument(currentDocId);
         }
 
     } catch (error) {

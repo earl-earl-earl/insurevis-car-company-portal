@@ -185,7 +185,15 @@ function setupEventListeners() {
     }
     
     // Document verification
-    addEventListenerSafely('saveVerification', 'click', saveDocumentVerification);
+    // addEventListenerSafely('saveVerification', 'click', saveDocumentVerification); // Removed
+
+    // Batch Verification Navigation
+    addEventListenerSafely('prevDocBtn', 'click', () => navigateDocument(-1));
+    addEventListenerSafely('nextDocBtn', 'click', () => navigateDocument(1));
+    
+    // Verification Actions
+    addEventListenerSafely('verifyDocBtn', 'click', () => handleDocumentDecision('verify'));
+    addEventListenerSafely('rejectDocBtn', 'click', () => handleDocumentDecision('reject'));
     
     // Claim approval
     // Approve should open the approval modal (insurance flow)
@@ -833,10 +841,18 @@ function displayCarDocuments(documents) {
 }
 
 async function viewDocument(documentId, canVerify) {
-    const doc = currentDocuments.find(d => d.id === documentId);
+    const docIndex = currentDocuments.findIndex(d => d.id === documentId);
+    const doc = currentDocuments[docIndex];
+
     if (!doc) {
         showError('Document not found');
         return;
+    }
+
+    // Hide approve/reject buttons when modal opens
+    const approvalActionsRow = document.getElementById('approvalActionsRow');
+    if (approvalActionsRow) {
+        approvalActionsRow.style.display = 'none';
     }
 
     // Populate modal with document information
@@ -863,33 +879,40 @@ async function viewDocument(documentId, canVerify) {
     if (canVerify && !currentClaimApproved) {
         verificationSection.style.display = 'block';
         
-        // Set verification status
-        const verifyCheckbox = document.getElementById('verifyCheckbox');
+        // --- NEW LOGIC START ---
         
-        verifyCheckbox.checked = doc.verified_by_insurance_company;
+        // Update Navigation Buttons
+        const prevBtn = document.getElementById('prevDocBtn');
+        const nextBtn = document.getElementById('nextDocBtn');
         
-        // Store current document ID for saving
-        document.getElementById('saveVerification').dataset.documentId = documentId;
+        if (prevBtn) prevBtn.disabled = docIndex === 0;
+        if (nextBtn) nextBtn.disabled = docIndex === currentDocuments.length - 1;
         
-        // Update checkbox label and button text based on verification status
-        const checkboxLabel = document.querySelector('.label-text');
-        const saveButton = document.getElementById('saveVerification');
+        // Update Verification Buttons State
+        const verifyBtn = document.getElementById('verifyDocBtn');
+        const rejectBtn = document.getElementById('rejectDocBtn');
         
-        if (checkboxLabel) {
+        if (verifyBtn && rejectBtn) {
+            // Reset styles
+            verifyBtn.classList.remove('active-state');
+            rejectBtn.classList.remove('active-state');
+            verifyBtn.style.opacity = '1';
+            rejectBtn.style.opacity = '1';
+
             if (doc.verified_by_insurance_company) {
-                checkboxLabel.textContent = 'Document is verified for insurance company requirements';
+                verifyBtn.innerHTML = '<i class="fas fa-check-circle"></i> Verified';
+                verifyBtn.classList.add('btn-success');
+                verifyBtn.classList.remove('btn-outline-success');
+                rejectBtn.style.opacity = '0.5';
             } else {
-                checkboxLabel.textContent = 'Verify this document for insurance company requirements';
+                verifyBtn.innerHTML = '<i class="fas fa-check"></i> Verify';
             }
         }
         
-        if (saveButton) {
-            if (doc.verified_by_insurance_company) {
-                saveButton.innerHTML = '<i class="fas fa-check"></i> Update Verification';
-            } else {
-                saveButton.innerHTML = '<i class="fas fa-check"></i> Verify Document';
-            }
-        }
+        // Store current document ID for actions
+        document.getElementById('documentViewerModal').dataset.currentDocId = documentId;
+
+        // --- NEW LOGIC END ---
         
     } else {
         verificationSection.style.display = 'none';
@@ -997,19 +1020,35 @@ async function loadDocumentContent(doc) {
     }
 }
 
-async function saveDocumentVerification() {
+function navigateDocument(direction) {
+    const currentDocId = document.getElementById('documentViewerModal').dataset.currentDocId;
+    const currentIndex = currentDocuments.findIndex(d => d.id === currentDocId);
+    
+    if (currentIndex === -1) return;
+    
+    const newIndex = currentIndex + direction;
+    
+    if (newIndex >= 0 && newIndex < currentDocuments.length) {
+        // Check if the next document is verifiable by insurance company
+        // If not, we might want to skip it or just show it as view-only
+        // For now, just view it, viewDocument handles the view-only logic
+        const nextDoc = currentDocuments[newIndex];
+        const canVerify = INSURANCE_DOCUMENT_TYPES.includes(nextDoc.type);
+        viewDocument(nextDoc.id, canVerify);
+    }
+}
+
+async function handleDocumentDecision(decision) {
     if (currentClaimApproved) {
         showError('Claim is approved. Documents are view-only.');
         return;
     }
-    const documentId = document.getElementById('saveVerification').dataset.documentId;
-    const isVerified = document.getElementById('verifyCheckbox').checked;
-
-    if (!documentId) {
-        showError('No document selected');
-        return;
-    }
-
+    
+    const currentDocId = document.getElementById('documentViewerModal').dataset.currentDocId;
+    if (!currentDocId) return;
+    
+    const isVerified = decision === 'verify';
+    
     try {
         const updateData = {
             verified_by_insurance_company: isVerified
@@ -1024,7 +1063,7 @@ async function saveDocumentVerification() {
         const { error } = await supabase
             .from('documents')
             .update(updateData)
-            .eq('id', documentId);
+            .eq('id', currentDocId);
 
         if (error) {
             console.error('Error updating document verification:', error);
@@ -1051,8 +1090,8 @@ async function saveDocumentVerification() {
             }
         }
 
-        // Update current documents array
-        const docIndex = currentDocuments.findIndex(doc => doc.id === documentId);
+        // Update local state
+        const docIndex = currentDocuments.findIndex(doc => doc.id === currentDocId);
         if (docIndex !== -1) {
             currentDocuments[docIndex] = { ...currentDocuments[docIndex], ...updateData };
         }
@@ -1065,16 +1104,26 @@ async function saveDocumentVerification() {
         displayInsuranceDocuments(insuranceDocuments);
         updateApprovalButtonStatus(insuranceDocuments);
         
-        // Close modal
-        closeDocumentViewer();
-
         // Show success message
-        showSuccess(isVerified ? 'Document verified successfully!' : 'Document verification removed');
+        showSuccess(isVerified ? 'Document Verified' : 'Document Rejected/Unverified');
+        
+        // Update current view buttons
+        const canVerify = INSURANCE_DOCUMENT_TYPES.includes(currentDocuments[docIndex].type);
+        viewDocument(currentDocId, canVerify); // Refresh buttons state
 
         // Reload claims to update counts
         setTimeout(() => {
             loadClaims();
         }, 1000);
+        
+        // Auto-navigate to next document
+        // Only if we are not at the last document
+        const currentIndex = currentDocuments.findIndex(d => d.id === currentDocId);
+        if (currentIndex < currentDocuments.length - 1) {
+             setTimeout(() => {
+                navigateDocument(1);
+            }, 500);
+        }
 
     } catch (error) {
         console.error('Error saving verification:', error);
@@ -1260,6 +1309,12 @@ function showDocumentsPage() {
 function closeDocumentViewer() {
     document.getElementById('documentViewerModal').style.display = 'none';
     document.getElementById('saveVerification').dataset.documentId = '';
+
+    // Restore buttons if appropriate
+    const approvalActionsRow = document.getElementById('approvalActionsRow');
+    if (approvalActionsRow && !currentClaimApproved) {
+         approvalActionsRow.style.display = 'flex';
+    }
 }
 
 function closeApprovalModal() {

@@ -266,26 +266,25 @@
 
             <div class="verification-section">
               <div class="verification-controls">
-                <label class="checkbox-container">
-                  <input type="checkbox" id="verifyCheckbox" />
-                  <span class="checkmark"></span>
-                  <span class="label-text"
-                    >Verify this document for car company requirements</span
-                  >
-                </label>
-
-                <div class="verification-actions">
-                  <button id="saveVerification" class="btn-primary">
-                    <i class="fas fa-save"></i> Save Verification
+                <div class="batch-navigation-controls" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 1rem;">
+                  <button id="prevDocBtn" class="btn-secondary" title="Previous Document">
+                    <i class="fas fa-chevron-left"></i> Previous
                   </button>
-                  <button
-                    id="cancelVerification"
-                    class="btn-secondary"
-                    onclick="closeDocumentViewer()"
-                  >
-                    Cancel
+                  
+                  <div class="verification-actions-group" style="display: flex; gap: 10px;">
+                    <button id="verifyDocBtn" class="btn-success">
+                      <i class="fas fa-check"></i> Verify
+                    </button>
+                    <button id="rejectDocBtn" class="btn-danger">
+                      <i class="fas fa-times"></i> Reject
+                    </button>
+                  </div>
+
+                  <button id="nextDocBtn" class="btn-secondary" title="Next Document">
+                    Next <i class="fas fa-chevron-right"></i>
                   </button>
                 </div>
+                <!-- Hidden checkbox for backward compatibility if needed, or just remove -->
               </div>
             </div>
           </div>
