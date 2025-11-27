@@ -357,6 +357,9 @@ function setupEventListeners() {
     // Claim status dropdown/control removed from UI; status updates are handled elsewhere.
 }
 
+// Global realtime subscription tracker for car company portal
+let claimsRealtimeSubscription = null;
+
 // Claims Management
 async function loadClaims() {
     const loadingElement = document.getElementById('loadingClaims');
@@ -447,12 +450,48 @@ async function loadClaims() {
 
         displayClaims(processedClaims);
         
+        // Set up realtime subscription for claims changes
+        setupClaimsRealtimeSubscription();
+        
     } catch (error) {
         console.error('Error loading claims:', error);
         showError('Failed to load claims');
     } finally {
         loadingElement.style.display = 'none';
     }
+}
+
+async function setupClaimsRealtimeSubscription() {
+    // Unsubscribe from any existing subscription
+    if (claimsRealtimeSubscription) {
+        await supabase.removeAllChannels();
+        claimsRealtimeSubscription = null;
+        console.log('🔴 Unsubscribed from previous claims realtime channel');
+    }
+
+    // Subscribe to claims table changes
+    claimsRealtimeSubscription = supabase
+        .channel('claims-changes')
+        .on('postgres_changes', 
+            { 
+                event: '*', // Listen to INSERT, UPDATE, DELETE
+                schema: 'public', 
+                table: 'claims' 
+            }, 
+            async (payload) => {
+                console.log('📡 Realtime event received:', payload.eventType, payload.new || payload.old);
+                
+                // Reload claims to reflect changes
+                await loadClaims();
+            }
+        )
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Subscribed to claims realtime updates (car company)');
+            } else if (status === 'CLOSED') {
+                console.log('❌ Realtime subscription closed');
+            }
+        });
 }
 
 function displayClaims(claims) {
