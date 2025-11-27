@@ -154,6 +154,15 @@
                 <p>Pending Insurance Verification</p>
               </div>
             </div>
+            <div class="stat-card rejected">
+              <div class="stat-icon">
+                <i class="fas fa-times-circle"></i>
+              </div>
+              <div class="stat-content">
+                <h3 id="rejectedInsuranceDocs">0</h3>
+                <p>Rejected Documents</p>
+              </div>
+            </div>
             <div class="stat-card total">
               <div class="stat-icon">
                 <i class="fas fa-file-alt"></i>
@@ -299,15 +308,45 @@
                     <button id="verifyDocBtn" class="btn-success">
                       <i class="fas fa-check"></i> Verify
                     </button>
-                    <!-- <button id="rejectDocBtn" class="btn-danger">
-                      <i class="fas fa-times"></i> Reject
-                    </button> -->
+                    <button id="rejectDocumentBtn" class="btn-danger">
+                      <i class="fas fa-times"></i> Reject Document
+                    </button>
                   </div>
 
                   <button id="nextDocBtn" class="btn-secondary" title="Next Document">
                     Next <i class="fas fa-chevron-right"></i>
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <!-- Document Rejection Pane -->
+            <div id="documentRejectionPane" class="document-rejection-pane">
+              <div class="rejection-pane-header">
+                <h4>Reject Document</h4>
+                <button class="close-pane" onclick="closeDocumentRejectionPane()">&times;</button>
+              </div>
+              <div class="rejection-pane-body">
+                <label for="rejectionReasonSelect" class="rejection-label">Reason <span class="required">*</span></label>
+                <select id="rejectionReasonSelect" class="rejection-select">
+                  <option value="">-- Select a reason --</option>
+                  <option value="document_illegible">Document is illegible or unclear</option>
+                  <option value="document_expired">Document is expired</option>
+                  <option value="document_incomplete">Document is incomplete</option>
+                  <option value="document_forged">Document appears to be forged</option>
+                  <option value="document_wrong_type">Wrong document type submitted</option>
+                  <option value="document_mismatch">Document information doesn't match claim</option>
+                  <option value="others">Other (please specify)</option>
+                </select>
+
+                <div id="otherReasonContainer" class="other-reason-container">
+                  <label for="otherReasonText" class="rejection-label">Specific Reason <span class="required">*</span></label>
+                  <textarea id="otherReasonText" class="rejection-textarea" placeholder="Please describe the specific reason for rejection..." rows="3"></textarea>
+                </div>
+              </div>
+              <div class="rejection-pane-footer">
+                <button class="btn-secondary" onclick="closeDocumentRejectionPane()">Cancel</button>
+                <button class="btn-danger" onclick="confirmDocumentRejection()">Reject</button>
               </div>
             </div>
           </div>
@@ -408,6 +447,10 @@
             </p>
             <p>This information will be sent to the claim owner.</p>
           </div>
+
+          <!-- Display Rejected Documents -->
+          <div id="rejectedDocumentsContainer"></div>
+
           <div class="rejection-notes-container">
             <label for="rejectionNotes">Rejection Reason (Required):</label>
             <textarea

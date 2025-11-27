@@ -2772,3 +2772,199 @@ button.btn-secondary.decision-btn:hover {
     border-color: #94a3b8;
 }
 
+/* Document Rejection Pane */
+.document-rejection-pane {
+    position: fixed;
+    right: 0;
+    top: 0;
+    height: 100vh;
+    width: 400px;
+    background: white;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+    transform: translateX(400px);
+    transition: transform 0.3s ease;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.document-rejection-pane.open {
+    transform: translateX(0);
+}
+
+.rejection-pane-header {
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.rejection-pane-header h4 {
+    margin: 0;
+    color: #2d3748;
+    font-size: 1.1rem;
+}
+
+.close-pane {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #718096;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.close-pane:hover {
+    background: #f7fafc;
+    color: #2d3748;
+}
+
+.rejection-pane-body {
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.rejection-label {
+    display: block;
+    font-weight: 500;
+    color: #2d3748;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+}
+
+.rejection-label .required {
+    color: #ef4444;
+}
+
+.rejection-select,
+.rejection-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    color: #2d3748;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.rejection-select:focus,
+.rejection-textarea:focus {
+    outline: none;
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.rejection-select {
+    height: 40px;
+    cursor: pointer;
+}
+
+.rejection-textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.other-reason-container {
+    margin-top: 15px;
+    display: none;
+}
+
+.other-reason-container.show {
+    display: block;
+}
+
+.rejection-pane-footer {
+    padding: 20px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.rejection-pane-footer button {
+    flex: 1;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-size: 0.9rem;
+}
+
+.rejection-pane-footer .btn-secondary {
+    background: #e2e8f0;
+    color: #2d3748;
+}
+
+.rejection-pane-footer .btn-secondary:hover {
+    background: #cbd5e0;
+}
+
+.rejection-pane-footer .btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.rejection-pane-footer .btn-danger:hover {
+    background: #dc2626;
+}
+
+/* Rejected Documents Display */
+.rejected-documents-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+}
+
+.rejected-documents-section h4 {
+    color: #dc2626;
+    margin: 0 0 15px 0;
+    font-size: 1rem;
+}
+
+.rejected-document-item {
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    border-left: 4px solid #ef4444;
+}
+
+.rejected-document-item:last-child {
+    margin-bottom: 0;
+}
+
+.rejected-document-name {
+    font-weight: 500;
+    color: #2d3748;
+    margin-bottom: 6px;
+}
+
+.rejected-document-reason {
+    color: #4a5568;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+/* Status badge rejected style */
+.status-badge-mini.rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+

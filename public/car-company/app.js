@@ -349,7 +349,7 @@ function setupEventListeners() {
     
     // Verification Actions
     document.getElementById('verifyDocBtn').addEventListener('click', () => handleDocumentDecision('verify'));
-    document.getElementById('rejectDocBtn').addEventListener('click', () => handleDocumentDecision('reject'));
+    document.getElementById('rejectDocumentBtn').addEventListener('click', () => openDocumentRejectionPane());
 
     // Claim decision buttons (approve/reject)
     setupClaimDecisionButtons();
@@ -410,7 +410,8 @@ async function loadClaims() {
                     documents (
                         id,
                         type,
-                        verified_by_car_company
+                        verified_by_car_company,
+                        car_company_verification_notes
                     )
                 `)
                 .order('created_at', { ascending: false });
@@ -431,12 +432,16 @@ async function loadClaims() {
             const verifiedCarDocs = carCompanyDocs.filter(doc => 
                 doc.verified_by_car_company
             );
+            const rejectedCarDocs = carCompanyDocs.filter(doc => 
+                doc.car_company_verification_notes
+            );
             
             return {
                 ...claim,
                 totalCarCompanyDocs: carCompanyDocs.length,
                 verifiedCarCompanyDocs: verifiedCarDocs.length,
-                pendingCarCompanyDocs: carCompanyDocs.length - verifiedCarDocs.length
+                rejectedCarCompanyDocs: rejectedCarDocs.length,
+                pendingCarCompanyDocs: carCompanyDocs.length - verifiedCarDocs.length - rejectedCarDocs.length
             };
         });
 
@@ -644,7 +649,7 @@ async function loadClaimDocuments(claimId) {
         console.log('Loaded documents:', documents);
         currentDocuments = documents;
 
-        // Update stats
+        // Update stats (this will also handle decision actions visibility)
         updateDocumentStats(documents);
         
         // Display documents
@@ -663,6 +668,15 @@ async function loadClaimDocuments(claimId) {
         } catch (e) {
             console.warn('Failed to apply approved state UI', e);
         }
+        
+        // Ensure decision actions visibility is correct after all updates
+        // This helps with the initial load issue
+        setTimeout(() => {
+            const decisionActions = document.getElementById('carClaimDecisionActions');
+            if (decisionActions && !currentClaimApproved && currentClaim) {
+                decisionActions.style.display = 'flex';
+            }
+        }, 100);
 
         // Show the claim status control for all claims when viewing the claim details.
         // If you later want to restrict this to claim owners or admins, add a
@@ -680,19 +694,20 @@ async function loadClaimDocuments(claimId) {
 function updateDocumentStats(documents) {
     const total = documents.length;
     const verified = documents.filter(doc => doc.verified_by_car_company).length;
-    const pending = total - verified;
+    const rejected = documents.filter(doc => doc.car_company_verification_notes).length;
+    const pending = total - verified - rejected;
 
     document.getElementById('totalDocs').textContent = total;
     document.getElementById('verifiedDocs').textContent = verified;
     document.getElementById('pendingDocs').textContent = pending;
+    document.getElementById('rejectedDocs').textContent = rejected;
 
     // Only show claim decision actions when a claim is actively viewed
-    // and all car-company-verifiable documents for that claim are verified.
+    // and the claim has not already been approved/rejected.
     const decisionActions = document.getElementById('carClaimDecisionActions');
     if (decisionActions) {
         const isClaimOpen = !!currentClaim;
-        const allVerified = total > 0 && verified === total;
-        if (isClaimOpen && allVerified && !currentClaimApproved) {
+        if (isClaimOpen && !currentClaimApproved) {
             decisionActions.style.display = 'flex';
         } else {
             decisionActions.style.display = 'none';
@@ -743,6 +758,7 @@ async function decideClaim(decision, notes = '') {
             updateData.car_company_status = 'approved';
             updateData.is_approved_by_car_company = true;
             updateData.car_company_approval_date = new Date().toISOString();
+            updateData.approved_at = new Date().toISOString();
             if (notes) updateData.car_company_approval_notes = notes;
             // Also set a dedicated flag used earlier if exists
             // (already setting is_approved_by_car_company above)
@@ -767,10 +783,13 @@ async function decideClaim(decision, notes = '') {
             })();
         } else if (decision === 'rejected') {
             // mark as not approved by car company and set main status to rejected
+            console.log('🔴 Processing REJECTED decision');
             updateData.car_company_status = 'rejected';
             updateData.is_approved_by_car_company = false;
             updateData.status = 'rejected'; // Set main status so insurance company knows it's rejected
             updateData.car_company_approval_date = null;
+            updateData.rejected_at = new Date().toISOString();
+            console.log('📝 rejected_at set to:', updateData.rejected_at);
             if (notes) updateData.car_company_approval_notes = notes;
             (async () => {
                 try {
@@ -827,6 +846,8 @@ async function decideClaim(decision, notes = '') {
             showError('Failed to update claim status');
             return;
         }
+
+        console.log('✅ Claim updated successfully with:', updateData);
 
         // Update UI: hide decision actions and redirect to home
         document.getElementById('carClaimDecisionActions').style.display = 'none';
@@ -923,7 +944,10 @@ function displayDocuments(documents) {
                     <span class="doc-type-name">${DOCUMENT_TYPE_NAMES[doc.type] || doc.type}</span>
                     ${doc.verified_by_car_company ? 
                         '<span class="status-badge-mini verified"><i class="fas fa-check-circle"></i> Verified</span>' : 
-                        (currentClaimApproved ? '' : '<span class="status-badge-mini pending"><i class="fas fa-clock"></i> Pending</span>')
+                        (doc.car_company_verification_notes ? 
+                            '<span class="status-badge-mini rejected"><i class="fas fa-times-circle"></i> Rejected</span>' :
+                            (currentClaimApproved ? '' : '<span class="status-badge-mini pending"><i class="fas fa-clock"></i> Pending</span>')
+                        )
                     }
                 </div>
                 <div class="document-meta">
@@ -1404,12 +1428,25 @@ async function handleDocumentDecision(decision) {
         // Only if we are not at the last document
         const currentIndex = currentDocuments.findIndex(d => d.id === currentDocId);
         if (currentIndex < currentDocuments.length - 1) {
-             setTimeout(() => {
+            // Hide decision actions before navigating to prevent flash
+            const decisionActions = document.getElementById('carClaimDecisionActions');
+            if (decisionActions) {
+                decisionActions.style.display = 'none';
+            }
+            
+            setTimeout(() => {
                 navigateDocument(1);
             }, 500);
         } else {
-            // If last document, maybe refresh the current view to show updated status
-             viewDocument(currentDocId);
+            // If last document, close the viewer to show decision actions
+            document.getElementById('documentViewerModal').style.display = 'none';
+            // Restore decision actions
+            if (!currentClaimApproved && currentClaim) {
+                const decisionActions = document.getElementById('carClaimDecisionActions');
+                if (decisionActions) {
+                    decisionActions.style.display = 'flex';
+                }
+            }
         }
 
     } catch (error) {
@@ -1446,10 +1483,21 @@ function openRejectionModal() {
         showError('Please select a claim first');
         return;
     }
+    
+    // Hide decision actions when rejection modal opens
+    const decisionActions = document.getElementById('carClaimDecisionActions');
+    if (decisionActions) {
+        decisionActions.style.display = 'none';
+    }
+    
     const modal = document.getElementById('rejectionModal');
     console.log('Rejection modal element:', modal);
     const notesTextarea = document.getElementById('rejectionNotes');
     if (notesTextarea) notesTextarea.value = '';
+    
+    // Populate rejected documents
+    populateRejectedDocuments();
+    
     if (modal) {
         modal.style.display = 'flex';
         console.log('Modal display set to flex');
@@ -1476,9 +1524,62 @@ function openRejectionModal() {
     }
 }
 
+function populateRejectedDocuments() {
+    const container = document.getElementById('rejectedDocumentsContainer');
+    if (!container) return;
+    
+    // Get all rejected documents (those with car_company_verification_notes set)
+    const rejectedDocs = currentDocuments.filter(doc => doc.car_company_verification_notes);
+    
+    if (rejectedDocs.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '<div class="rejected-documents-section"><h4><i class="fas fa-exclamation-circle"></i> Rejected Documents</h4>';
+    
+    const reasonMap = {
+        'document_illegible': 'Document is illegible or unclear',
+        'document_expired': 'Document is expired',
+        'document_incomplete': 'Document is incomplete',
+        'document_forged': 'Document appears to be forged',
+        'document_wrong_type': 'Wrong document type submitted',
+        'document_mismatch': 'Document information doesn\'t match claim'
+    };
+    
+    rejectedDocs.forEach(doc => {
+        let reason = doc.car_company_verification_notes || 'No reason provided';
+        // Check if it's a dropdown option that needs formatting
+        if (reasonMap[reason]) {
+            reason = reasonMap[reason];
+        }
+        html += `
+            <div class="rejected-document-item">
+                <div class="rejected-document-name">
+                    <i class="fas ${getDocumentIcon(doc.type)}"></i> ${DOCUMENT_TYPE_NAMES[doc.type] || doc.type}
+                </div>
+                <div class="rejected-document-reason">
+                    <strong>Reason:</strong> ${reason}
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
 function closeRejectionModal() {
     const modal = document.getElementById('rejectionModal');
     if (modal) modal.style.display = 'none';
+    
+    // Restore decision actions visibility if claim is still open and not approved
+    if (!currentClaimApproved && currentClaim) {
+        const decisionActions = document.getElementById('carClaimDecisionActions');
+        if (decisionActions) {
+            decisionActions.style.display = 'flex';
+        }
+    }
 }
 
 function applyApprovedState(claim) {
@@ -1567,11 +1668,10 @@ function closeDocumentViewer() {
     document.getElementById('documentViewerModal').style.display = 'none';
     document.getElementById('saveVerification').dataset.documentId = '';
     
-    // Show approve/reject buttons again if all documents are verified and claim not approved
-    if (!currentClaimApproved && currentDocuments && currentDocuments.length > 0) {
-        const allVerified = currentDocuments.every(doc => doc.verified_by_car_company);
+    // Restore decision actions visibility if claim is still open and not approved
+    if (!currentClaimApproved && currentClaim) {
         const decisionActions = document.getElementById('carClaimDecisionActions');
-        if (decisionActions && allVerified) {
+        if (decisionActions) {
             decisionActions.style.display = 'flex';
         }
     }
@@ -1672,7 +1772,7 @@ async function openDocumentInNewTab(documentId) {
 
 // Helper to resolve bucket and path for a document
 function resolveStorageObject(doc) {
-    let objectPath = doc.file_path || doc.path || doc.filePath || null;
+    let objectPath = doc.storage_path || doc.file_path || doc.path || doc.filePath || null;
     let bucketName = doc.bucket || 'insurevis-documents';
     const initialUrl = doc.remote_url || doc.url || null;
     if (!objectPath && initialUrl) {
@@ -1912,3 +2012,125 @@ window.addEventListener('click', function(event) {
         closeRejectionModal();
     }
 });
+
+// Document Rejection Pane Functions
+function openDocumentRejectionPane() {
+    const pane = document.getElementById('documentRejectionPane');
+    if (pane) {
+        pane.classList.add('open');
+        document.getElementById('rejectionReasonSelect').value = '';
+        document.getElementById('otherReasonText').value = '';
+        document.getElementById('otherReasonContainer').classList.remove('show');
+    }
+}
+
+function closeDocumentRejectionPane() {
+    const pane = document.getElementById('documentRejectionPane');
+    if (pane) {
+        pane.classList.remove('open');
+    }
+}
+
+// Handle rejection reason dropdown change
+document.addEventListener('DOMContentLoaded', function() {
+    const reasonSelect = document.getElementById('rejectionReasonSelect');
+    if (reasonSelect) {
+        reasonSelect.addEventListener('change', function() {
+            const otherContainer = document.getElementById('otherReasonContainer');
+            if (this.value === 'others') {
+                otherContainer.classList.add('show');
+                document.getElementById('otherReasonText').focus();
+            } else {
+                otherContainer.classList.remove('show');
+            }
+        });
+    }
+});
+
+async function confirmDocumentRejection() {
+    const reasonSelect = document.getElementById('rejectionReasonSelect');
+    const otherReasonText = document.getElementById('otherReasonText');
+    
+    const reason = reasonSelect.value;
+    if (!reason) {
+        showError('Please select a rejection reason');
+        return;
+    }
+    
+    let rejectionNotes = reason;
+    if (reason === 'others') {
+        const customReason = otherReasonText.value.trim();
+        if (!customReason) {
+            showError('Please provide a specific reason');
+            return;
+        }
+        rejectionNotes = `Other: ${customReason}`;
+    }
+    
+    closeDocumentRejectionPane();
+    
+    const currentDocId = document.getElementById('documentViewerModal').dataset.currentDocId;
+    if (!currentDocId) return;
+    
+    try {
+        // Update document with rejection notes
+        const { error } = await supabase
+            .from('documents')
+            .update({
+                verified_by_car_company: false,
+                car_company_verification_date: null,
+                car_company_verification_notes: rejectionNotes
+            })
+            .eq('id', currentDocId);
+
+        if (error) {
+            console.error('Error rejecting document:', error);
+            showError('Failed to reject document');
+            return;
+        }
+
+        // Update local state
+        const docIndex = currentDocuments.findIndex(doc => doc.id === currentDocId);
+        if (docIndex !== -1) {
+            currentDocuments[docIndex] = {
+                ...currentDocuments[docIndex],
+                verified_by_car_company: false,
+                car_company_verification_date: null,
+                car_company_verification_notes: rejectionNotes
+            };
+        }
+
+        // Clear car company approval if any document is rejected
+        if (currentClaim) {
+            await supabase
+                .from('claims')
+                .update({ is_approved_by_car_company: false, car_company_approval_date: null })
+                .eq('id', currentClaim);
+        }
+
+        // Refresh displays
+        updateDocumentStats(currentDocuments);
+        displayDocuments(currentDocuments);
+        
+        showSuccess('Document rejected successfully!');
+
+        // Auto-navigate to next document
+        const currentIndex = currentDocuments.findIndex(d => d.id === currentDocId);
+        if (currentIndex < currentDocuments.length - 1) {
+            setTimeout(() => {
+                navigateDocument(1);
+            }, 500);
+        } else {
+            viewDocument(currentDocId);
+        }
+
+        // Reload claims to update counts
+        setTimeout(() => {
+            loadClaims();
+        }, 1000);
+
+    } catch (error) {
+        console.error('Error in confirmDocumentRejection:', error);
+        showError('Failed to reject document');
+    }
+}
