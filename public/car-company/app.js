@@ -1751,7 +1751,8 @@ function formatStatus(status) {
         'submitted': 'Submitted',
         'draft': 'Draft',
         'approved': 'Approved',
-        'rejected': 'Rejected'
+        'rejected': 'Rejected',
+        'appealed': 'Appealed'
     };
     if (displayMap[normalized]) return displayMap[normalized];
     // Fallback: convert snake_case or kebab-case to Title Case

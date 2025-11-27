@@ -1535,7 +1535,18 @@ function filterClaims() {
 
 // Utility functions
 function formatStatus(status) {
-    return status.split('_').map(word => 
+    if (!status) return '';
+    const normalized = String(status).toLowerCase();
+    const displayMap = {
+        'under_review': 'In Review',
+        'appealed': 'Appealed',
+        'approved': 'Approved',
+        'rejected': 'Rejected',
+        'submitted': 'Submitted',
+        'draft': 'Draft'
+    };
+    if (displayMap[normalized]) return displayMap[normalized];
+    return normalized.split('_').map(word => 
         word.charAt(0).toUpperCase() + word.slice(1)
     ).join(' ');
 }
