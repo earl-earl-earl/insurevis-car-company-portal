@@ -362,6 +362,8 @@ function setupEventListeners() {
 
 // Global realtime subscription tracker for car company portal
 let claimsRealtimeSubscription = null;
+// Helper to coalesce rapid realtime events and avoid spamming DB loads
+let claimsRealtimeReloadTimeout = null;
 
 // Claims Management
 async function loadClaims() {
@@ -469,11 +471,16 @@ async function loadClaims() {
 }
 
 async function setupClaimsRealtimeSubscription() {
-    // Unsubscribe from any existing subscription
+    // Unsubscribe from any existing subscription (only this channel)
     if (claimsRealtimeSubscription) {
-        await supabase.removeAllChannels();
+        try {
+            supabase.removeChannel(claimsRealtimeSubscription);
+            console.log('🔴 Unsubscribed from previous claims realtime channel');
+        } catch (err) {
+            console.warn('Failed to remove previous channel via removeChannel, falling back to removeAllChannels:', err);
+            try { await supabase.removeAllChannels(); } catch (e) { /* ignore */ }
+        }
         claimsRealtimeSubscription = null;
-        console.log('🔴 Unsubscribed from previous claims realtime channel');
     }
 
     // Subscribe to claims table changes
@@ -487,9 +494,25 @@ async function setupClaimsRealtimeSubscription() {
             }, 
             async (payload) => {
                 console.log('📡 Realtime event received:', payload.eventType, payload.new || payload.old);
-                
-                // Reload claims to reflect changes
-                await loadClaims();
+
+                // Only handle events that include new data (INSERT/UPDATE), or deleted claims which also affect the list
+                const eventType = String(payload.eventType || '').toLowerCase();
+                if (!['insert', 'update', 'delete', 'postgres_changes', '*'].includes(eventType) && !payload.new && !payload.old) {
+                    // Not a meaningful change for claim list
+                    return;
+                }
+
+                // Debounce reloads to avoid repeated full table reloads when many events occur
+                if (claimsRealtimeReloadTimeout) clearTimeout(claimsRealtimeReloadTimeout);
+                claimsRealtimeReloadTimeout = setTimeout(async () => {
+                    try {
+                        await loadClaims();
+                    } catch (err) {
+                        console.error('Error reloading claims from realtime event:', err);
+                    } finally {
+                        claimsRealtimeReloadTimeout = null;
+                    }
+                }, 450);
             }
         )
         .subscribe((status) => {
