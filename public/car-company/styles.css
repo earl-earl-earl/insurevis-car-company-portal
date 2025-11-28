@@ -242,7 +242,7 @@ body {
 .status-approved { background: #c6f6d5; color: #22543d; }
 .status-rejected { background: #fed7d7; color: #9b2c2c; }
 .status-closed { background: #e2e8f0; color: #4a5568; }
-.status-appealed { background: #f3e8ff; color: #6b21a8; }
+.status-appealed { background: #7c3aed; color: white; }
 
 .verification-status {
     display: flex;

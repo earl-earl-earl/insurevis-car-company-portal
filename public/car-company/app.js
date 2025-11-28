@@ -420,8 +420,9 @@ async function loadClaims() {
                         car_company_verification_notes
                     )
                 `)
-                // Prefer the claim's `submitted_at` timestamp for sorting. If it's
-                // `NULL` (older rows or missing values), fall back to `created_at`.
+                // Prefer the claim's `updated_at` timestamp for sorting. If it's
+                // `NULL` (older rows or missing values), fall back to `submitted_at`, then `created_at`.
+                .order('created_at', { ascending: false })
                 .order('submitted_at', { ascending: false })
                 .order('created_at', { ascending: false });
 
@@ -549,7 +550,7 @@ function displayClaims(claims) {
                 </span>
             </td>
             <td>
-                <span class="date">${formatDate(claim.submitted_at || claim.created_at)}</span>
+                <span class="date">${formatDate(claim.created_at)}</span>
             </td>
             <td>
                 <button class="btn-primary btn-sm" onclick="viewClaimDocuments('${claim.id}')">
@@ -1922,7 +1923,8 @@ async function __fallbackDocView(documentId, fileExtension) {
 }
 
 function formatDate(dateString) {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
