@@ -450,6 +450,9 @@ async function loadClaims() {
                     insurance_verification_notes
                 )
             `)
+            // Prefer the claim's `submitted_at` timestamp for sorting. If it's
+            // `NULL` (older rows or missing values), fall back to `created_at`.
+            .order('submitted_at', { ascending: false })
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -602,7 +605,7 @@ function displayClaims(claims) {
                 </span>
             </td>
             <td>
-                <span class="date">${formatDate(claim.created_at)}</span>
+                <span class="date">${formatDate(claim.submitted_at || claim.created_at)}</span>
             </td>
             <td>
                 <button class="btn-primary btn-sm" onclick="viewClaimDocuments('${claim.id}')">
@@ -939,9 +942,11 @@ async function viewDocument(documentId, canVerify) {
 
     // Show/hide verification controls based on whether this document can be verified by insurance
     const verificationSection = document.getElementById('verificationSection');
+    const rejectionNoteDisplay = document.getElementById('documentRejectionNoteDisplay');
     
     if (canVerify && !currentClaimApproved) {
         verificationSection.style.display = 'block';
+        if (rejectionNoteDisplay) rejectionNoteDisplay.style.display = 'none';
         
         // --- NEW LOGIC START ---
         
@@ -980,6 +985,19 @@ async function viewDocument(documentId, canVerify) {
         
     } else {
         verificationSection.style.display = 'none';
+        
+        // Show document rejection note if claim is rejected and document has a rejection note
+        if (currentClaimApproved && currentClaimData && currentClaimData.status === 'rejected' && doc.insurance_verification_notes) {
+            if (rejectionNoteDisplay) {
+                const rejectionNoteContent = document.getElementById('documentRejectionNoteContent');
+                if (rejectionNoteContent) {
+                    rejectionNoteContent.textContent = doc.insurance_verification_notes;
+                }
+                rejectionNoteDisplay.style.display = 'block';
+            }
+        } else if (rejectionNoteDisplay) {
+            rejectionNoteDisplay.style.display = 'none';
+        }
     }
 
     // Load document content
@@ -1388,11 +1406,10 @@ function showDocumentsPage() {
 
 function closeDocumentViewer() {
     document.getElementById('documentViewerModal').style.display = 'none';
-    document.getElementById('saveVerification').dataset.documentId = '';
 
     // Restore buttons if appropriate
     const approvalActionsRow = document.getElementById('approvalActionsRow');
-    if (approvalActionsRow && !currentClaimApproved) {
+    if (currentClaim && approvalActionsRow && !currentClaimApproved) {
          approvalActionsRow.style.display = 'flex';
     }
 }

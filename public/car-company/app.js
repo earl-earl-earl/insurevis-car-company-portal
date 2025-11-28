@@ -10,6 +10,7 @@ let currentClaim = null;
 let currentDocuments = [];
 let currentVehicleInfo = null;
 let currentClaimApproved = false;
+let currentClaimData = null;
 
 // Car company verifiable document types
 const CAR_COMPANY_DOCUMENT_TYPES = [
@@ -187,7 +188,8 @@ async function createTestData() {
                 user_id: '11111111-1111-1111-1111-111111111111',
                 status: 'submitted',
                 is_approved_by_car_company: false,
-                created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+                created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+                submitted_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
             },
             {
                 id: 'claim-002',
@@ -195,7 +197,8 @@ async function createTestData() {
                 user_id: '22222222-2222-2222-2222-222222222222',
                 status: 'under_review',
                 is_approved_by_car_company: false,
-                created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
+                created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+                submitted_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
             }
         ];
 
@@ -417,6 +420,9 @@ async function loadClaims() {
                         car_company_verification_notes
                     )
                 `)
+                // Prefer the claim's `submitted_at` timestamp for sorting. If it's
+                // `NULL` (older rows or missing values), fall back to `created_at`.
+                .order('submitted_at', { ascending: false })
                 .order('created_at', { ascending: false });
 
         if (error) {
@@ -513,8 +519,9 @@ function displayClaims(claims) {
         <tr class="claim-row ${
             claim.car_company_status === 'approved' ? 'approved-row' : 
             claim.car_company_status === 'rejected' ? 'rejected-row' : 
+            claim.car_company_status === 'appealed' ? 'appealed-row' :
             ''
-        }" data-claim-id="${claim.id}">
+        }" data-claim-id="${claim.id}" data-car-company-status="${(claim.car_company_status || 'pending')}">
             <td>
                 <strong>${claim.claim_number}</strong>
             </td>
@@ -527,22 +534,9 @@ function displayClaims(claims) {
             <td>
                 ${(() => {
                     const carStatus = claim.car_company_status || 'pending';
-                    
-                    let label, klass;
-                    if (carStatus === 'approved') {
-                        label = 'Approved';
-                        klass = 'approved';
-                    } else if (carStatus === 'rejected') {
-                        label = 'Rejected';
-                        klass = 'rejected';
-                    } else if (carStatus === 'under_review') {
-                        label = 'Under Review';
-                        klass = 'under_review';
-                    } else {
-                        label = 'Pending';
-                        klass = 'pending';
-                    }
-                    
+                    const normalized = String(carStatus).toLowerCase();
+                    const label = formatStatus(normalized);
+                    const klass = normalized.replace(/\s+/g, '_');
                     return `<span class="status-badge status-${klass}">${label}</span>`;
                 })()}
             </td>
@@ -555,7 +549,7 @@ function displayClaims(claims) {
                 </span>
             </td>
             <td>
-                <span class="date">${formatDate(claim.created_at)}</span>
+                <span class="date">${formatDate(claim.submitted_at || claim.created_at)}</span>
             </td>
             <td>
                 <button class="btn-primary btn-sm" onclick="viewClaimDocuments('${claim.id}')">
@@ -609,8 +603,9 @@ async function loadClaimDocuments(claimId) {
             return;
         }
 
-    // Remember which claim is open
+    // Remember which claim is open and store claim data globally
         currentClaim = claim.id;
+        currentClaimData = claim;
     // Track approval state for UI logic - both approved and rejected should be view-only
     const isApproved = claim.car_company_status === 'approved';
     const isRejected = claim.car_company_status === 'rejected';
@@ -1038,6 +1033,31 @@ async function viewDocument(documentId) {
 
     // Populate vehicle information (this would normally come from the claim or document data)
     await populateVehicleInformation(currentClaim, doc);
+
+    // Handle verification section visibility and rejection note display
+    const verificationSection = document.querySelector('.verification-section');
+    const rejectionNoteDisplay = document.getElementById('documentRejectionNoteDisplay');
+    
+    if (!currentClaimApproved) {
+        // In edit mode - show verification controls
+        if (verificationSection) verificationSection.style.display = 'block';
+        if (rejectionNoteDisplay) rejectionNoteDisplay.style.display = 'none';
+    } else {
+        // In view mode - show rejection note if claim is rejected and document has a rejection note
+        if (verificationSection) verificationSection.style.display = 'none';
+        
+        if (currentClaimData && currentClaimData.car_company_status === 'rejected' && doc.car_company_verification_notes) {
+            if (rejectionNoteDisplay) {
+                const rejectionNoteContent = document.getElementById('documentRejectionNoteContent');
+                if (rejectionNoteContent) {
+                    rejectionNoteContent.textContent = doc.car_company_verification_notes;
+                }
+                rejectionNoteDisplay.style.display = 'block';
+            }
+        } else if (rejectionNoteDisplay) {
+            rejectionNoteDisplay.style.display = 'none';
+        }
+    }
 
     // --- NEW LOGIC START ---
     
@@ -1705,10 +1725,9 @@ function showDocumentsPage() {
 
 function closeDocumentViewer() {
     document.getElementById('documentViewerModal').style.display = 'none';
-    document.getElementById('saveVerification').dataset.documentId = '';
     
     // Restore decision actions visibility if claim is still open and not approved
-    if (!currentClaimApproved && currentClaim) {
+    if (currentClaim && !currentClaimApproved) {
         const decisionActions = document.getElementById('carClaimDecisionActions');
         if (decisionActions) {
             decisionActions.style.display = 'flex';
@@ -1727,14 +1746,16 @@ function filterClaims() {
         const claimNumber = row.querySelector('td:first-child').textContent.toLowerCase();
         const userName = row.querySelector('.user-name').textContent.toLowerCase();
         const userEmail = row.querySelector('.user-info small').textContent.toLowerCase();
-        const status = row.querySelector('.status-badge').textContent.toLowerCase();
+        const status = (row.dataset.carCompanyStatus || row.querySelector('.status-badge')?.textContent || '').toLowerCase();
         
         const matchesSearch = !searchTerm || 
             claimNumber.includes(searchTerm) || 
             userName.includes(searchTerm) || 
             userEmail.includes(searchTerm);
             
-        const matchesStatus = !statusFilter || status.includes(statusFilter.replace('_', ' '));
+        // Compare normalized values (e.g. 'appealed', 'pending', 'approved')
+        const normalizedFilter = (statusFilter || '').toLowerCase();
+        const matchesStatus = !normalizedFilter || status.includes(normalizedFilter.replace('_', ' ')) || status.includes(normalizedFilter);
         
         row.style.display = matchesSearch && matchesStatus ? '' : 'none';
     });

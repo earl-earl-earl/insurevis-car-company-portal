@@ -73,7 +73,7 @@
                 <th>Status</th>
                 <th>Uploaded Documents</th>
                 <th>Pending Documents</th>
-                <th>Created Date</th>
+                <th>Submitted Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -266,6 +266,15 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- Document Rejection Note (shown when document is rejected and claim is rejected) -->
+            <div id="documentRejectionNoteDisplay" class="document-rejection-note-display">
+              <div class="rejection-note-header">
+                <i class="fas fa-exclamation-circle"></i>
+                <strong>Document Rejected</strong>
+              </div>
+              <div class="rejection-note-content" id="documentRejectionNoteContent"></div>
             </div>
 
             <div class="document-viewer">
