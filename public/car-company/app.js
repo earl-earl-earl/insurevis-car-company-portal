@@ -487,8 +487,9 @@ async function loadClaims() {
             const verifiedCarDocs = carCompanyDocs.filter(doc => 
                 doc.verified_by_car_company
             );
+            // FIX: Only count as rejected if NOT verified (avoids double counting)
             const rejectedCarDocs = carCompanyDocs.filter(doc => 
-                doc.car_company_verification_notes
+                !doc.verified_by_car_company && doc.car_company_verification_notes
             );
             
             return {
@@ -795,7 +796,8 @@ async function loadClaimDocuments(claimId) {
 function updateDocumentStats(documents) {
     const total = documents.length;
     const verified = documents.filter(doc => doc.verified_by_car_company).length;
-    const rejected = documents.filter(doc => doc.car_company_verification_notes).length;
+    // FIX: Only count rejected if NOT verified (avoids double counting)
+    const rejected = documents.filter(doc => !doc.verified_by_car_company && doc.car_company_verification_notes).length;
     const pending = total - verified - rejected;
 
     document.getElementById('totalDocs').textContent = total;
@@ -1450,6 +1452,7 @@ async function handleDocumentDecision(decision) {
 
         if (isVerified) {
             updateData.car_company_verification_date = new Date().toISOString();
+            updateData.car_company_verification_notes = null; // FIX: Clear notes on verify
         } else {
             updateData.car_company_verification_date = null;
         }
