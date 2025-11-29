@@ -13,14 +13,15 @@ let currentClaimApproved = false;
 
 // Insurance company verifiable document types
 const INSURANCE_DOCUMENT_TYPES = [
-    'police_report',
-    'insurance_policy',
+    'lto_or',
+    'lto_cr', 
     'drivers_license',
     'owner_valid_id',
-    'job_estimate',
+    'stencil_strips',
     'damage_photos',
-    'lto_or',
-    'lto_cr',
+    'job_estimate',
+    'insurance_policy',
+    'police_report',
     'additional_documents'
 ];
 
@@ -792,7 +793,6 @@ async function loadClaimDocuments(claimId) {
         
         // Display documents
         displayInsuranceDocuments(insuranceDocuments);
-        displayCarDocuments(carDocuments);
 
         // Update approval button status
         updateApprovalButtonStatus(insuranceDocuments);

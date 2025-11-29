@@ -20,7 +20,10 @@ const CAR_COMPANY_DOCUMENT_TYPES = [
     'owner_valid_id',
     'stencil_strips',
     'damage_photos',
-    'job_estimate'
+    'job_estimate',
+    'insurance_policy',
+    'police_report',
+    'additional_documents'
 ];
 
 // Document type display names
@@ -433,6 +436,46 @@ async function loadClaims() {
             showError('Failed to load claims');
             return;
         }
+
+        // --- NEW LOGIC: Check for unverified documents in approved claims ---
+        if (claims && claims.length > 0) {
+            const claimsToRevert = [];
+            
+            claims.forEach(claim => {
+                const isApproved = claim.car_company_status === 'approved' || claim.is_approved_by_car_company === true;
+                
+                if (isApproved && claim.documents) {
+                    // Check if there is ANY document relevant to car company that is NOT verified
+                    const hasUnverifiedDocs = claim.documents.some(doc => 
+                        CAR_COMPANY_DOCUMENT_TYPES.includes(doc.type) && 
+                        !doc.verified_by_car_company
+                    );
+
+                    if (hasUnverifiedDocs) {
+                        claimsToRevert.push(claim.id);
+                        
+                        // Update local object immediately so UI shows "pending"
+                        claim.car_company_status = 'pending';
+                        claim.is_approved_by_car_company = false;
+                    }
+                }
+            });
+
+            if (claimsToRevert.length > 0) {
+                console.log(`🔄 Reverting ${claimsToRevert.length} approved claims to pending due to unverified documents.`);
+                
+                // Perform the update in background
+                await supabase
+                    .from('claims')
+                    .update({ 
+                        car_company_status: 'pending',
+                        is_approved_by_car_company: false,
+                        car_company_approval_date: null
+                    })
+                    .in('id', claimsToRevert);
+            }
+        }
+        // --- END NEW LOGIC ---
 
         console.log('Loaded claims:', claims);
         
