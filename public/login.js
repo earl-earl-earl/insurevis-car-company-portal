@@ -1,14 +1,32 @@
 'use strict';
 
-const SUPABASE_URL = 'https://vvnsludqdidnqpbzzgeb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2bnNsdWRxZGlkbnFwYnp6Z2ViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNDg3MjIsImV4cCI6MjA3MDcyNDcyMn0.aFtPK2qhVJw3z324PjuM-q7e5_4J55mgm7A2fqkLO3c';
+let supabase = null;
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: true,
-    detectSessionInUrl: true
+// Initialize Supabase client from backend config
+async function initSupabase() {
+  if (supabase) return supabase;
+  
+  try {
+    const response = await fetch('/api/config/supabase');
+    const result = await response.json();
+    
+    if (!result.success || !result.data) {
+      throw new Error('Failed to load Supabase configuration');
+    }
+    
+    supabase = window.supabase.createClient(result.data.url, result.data.anonKey, {
+      auth: {
+        persistSession: true,
+        detectSessionInUrl: true
+      }
+    });
+    
+    return supabase;
+  } catch (error) {
+    console.error('Error initializing Supabase:', error);
+    throw error;
   }
-});
+}
 
 const ROLE_ROUTES = {
   car_company: '/car-company/',
@@ -165,6 +183,7 @@ async function checkExistingSession() {
   }
   
   try {
+    await initSupabase();
     const {
       data: { session }
     } = await supabase.auth.getSession();
@@ -191,6 +210,7 @@ async function handleLogin(event) {
   showMessage('Signing you in…');
 
   try {
+    await initSupabase();
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
@@ -229,6 +249,7 @@ async function handlePasswordReset(event) {
   showMessage('Sending password reset instructions…');
 
   try {
+    await initSupabase();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin + '/reset-password'
     });
@@ -263,13 +284,23 @@ async function bootstrap() {
     }, 1000);
   }
   
+  await initSupabase();
   wireEvents();
   await checkExistingSession();
+  
+  // Set up auth state change listener
+  supabase.auth.onAuthStateChange((event, session) => {
+    // Don't redirect on SIGNED_OUT events or during logout to avoid redirect loops
+    if (event === 'SIGNED_OUT' || isLoggingOut) {
+      return;
+    }
+    if (session?.user && !isLoggingOut) {
+      redirectForUser(session.user, { silent: true });
+    }
+  });
 }
 
 bootstrap();
-
-supabase.auth.onAuthStateChange((event, session) => {
   // Don't redirect on SIGNED_OUT events or during logout to avoid redirect loops
   if (event === 'SIGNED_OUT' || isLoggingOut) {
     return;

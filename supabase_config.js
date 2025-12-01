@@ -1,10 +1,15 @@
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
-// Supabase configuration - matches your Flutter app
-const supabaseUrl = 'https://vvnsludqdidnqpbzzgeb.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2bnNsdWRxZGlkbnFwYnp6Z2ViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNDg3MjIsImV4cCI6MjA3MDcyNDcyMn0.aFtPK2qhVJw3z324PjuM-q7e5_4J55mgm7A2fqkLO3c';
+// Supabase configuration - loaded from environment variables
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing required environment variables: SUPABASE_URL and SUPABASE_ANON_KEY must be set in .env file');
+}
 
 // Create Supabase client
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-module.exports = { supabase };
+module.exports = { supabase, supabaseUrl, supabaseAnonKey };

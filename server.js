@@ -1,9 +1,10 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { supabase } = require('./supabase_config');
+const { supabase, supabaseUrl, supabaseAnonKey } = require('./supabase_config');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -66,6 +67,17 @@ const recalls = [
 ];
 
 // Routes
+
+// Get Supabase configuration for frontend
+app.get('/api/config/supabase', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey
+    }
+  });
+});
 
 // Get vehicle information
 app.get('/api/vehicle/:vin', (req, res) => {

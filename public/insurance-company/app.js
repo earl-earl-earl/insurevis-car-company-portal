@@ -1,9 +1,31 @@
 // Insurance Company Portal - Document Verification & Claims Approval System
-// Supabase Configuration
-const supabaseUrl = 'https://vvnsludqdidnqpbzzgeb.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2bnNsdWRxZGlkbnFwYnp6Z2ViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNDg3MjIsImV4cCI6MjA3MDcyNDcyMn0.aFtPK2qhVJw3z324PjuM-q7e5_4J55mgm7A2fqkLO3c';
+// Supabase Configuration - loaded from backend
+let supabase = null;
+let supabaseUrl = null;
+let supabaseAnonKey = null;
 
-const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+// Initialize Supabase client from backend config
+async function initSupabase() {
+  if (supabase) return supabase;
+  
+  try {
+    const response = await fetch('/api/config/supabase');
+    const result = await response.json();
+    
+    if (!result.success || !result.data) {
+      throw new Error('Failed to load Supabase configuration');
+    }
+    
+    supabaseUrl = result.data.url;
+    supabaseAnonKey = result.data.anonKey;
+    supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+    
+    return supabase;
+  } catch (error) {
+    console.error('Error initializing Supabase:', error);
+    throw error;
+  }
+}
 
 // Global variables
 let currentClaim = null;
@@ -116,6 +138,7 @@ function redirectTo(path) {
 
 async function bootstrapPortal() {
     try {
+        await initSupabase();
         const { data: { session } } = await supabase.auth.getSession();
         const user = session?.user;
 

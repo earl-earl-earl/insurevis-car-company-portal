@@ -1,14 +1,32 @@
 'use strict';
 
-const SUPABASE_URL = 'https://vvnsludqdidnqpbzzgeb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2bnNsdWRxZGlkbnFwYnp6Z2ViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNDg3MjIsImV4cCI6MjA3MDcyNDcyMn0.aFtPK2qhVJw3z324PjuM-q7e5_4J55mgm7A2fqkLO3c';
+let supabase = null;
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: false,
-    detectSessionInUrl: true
+// Initialize Supabase client from backend config
+async function initSupabase() {
+  if (supabase) return supabase;
+  
+  try {
+    const response = await fetch('/api/config/supabase');
+    const result = await response.json();
+    
+    if (!result.success || !result.data) {
+      throw new Error('Failed to load Supabase configuration');
+    }
+    
+    supabase = window.supabase.createClient(result.data.url, result.data.anonKey, {
+      auth: {
+        persistSession: false,
+        detectSessionInUrl: true
+      }
+    });
+    
+    return supabase;
+  } catch (error) {
+    console.error('Error initializing Supabase:', error);
+    throw error;
   }
-});
+}
 
 const ROLE_LABELS = {
   admin: 'Platform administrator',
@@ -98,6 +116,7 @@ async function handleSignup(event) {
   showMessage('Creating account…');
 
   try {
+    await initSupabase();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -160,6 +179,7 @@ function wireEvents() {
   const logoutButton = qs('logoutButton');
   logoutButton?.addEventListener('click', async () => {
     try {
+      await initSupabase();
       // Sign out from Supabase
       await supabase.auth.signOut({ scope: 'global' });
       // Clear all local storage related to Supabase
@@ -177,7 +197,8 @@ function wireEvents() {
   });
 }
 
-function init() {
+async function init() {
+  await initSupabase();
   wireEvents();
   showMessage('Enter the administrator details to provision a new account.');
 }
