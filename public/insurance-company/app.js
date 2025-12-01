@@ -1392,6 +1392,25 @@ async function approveClaim() {
             return;
         }
 
+        // Send notification to claim owner
+        (async () => {
+            try {
+                const { data: claimData } = await supabase
+                    .from('claims')
+                    .select('user_id, claim_number')
+                    .eq('id', currentClaim)
+                    .single();
+                if (claimData?.user_id) {
+                    const message = notes && notes.trim()
+                        ? `Your claim ${claimData.claim_number} has been approved by the Insurance Company.\n\nNotes: ${notes}`
+                        : `Your claim ${claimData.claim_number} has been approved by the Insurance Company.`;
+                    sendNotifToUser(claimData.user_id, 'Claim Approved', message, 'approved');
+                }
+            } catch (e) {
+                console.warn('Error sending approval notification:', e);
+            }
+        })();
+
         closeApprovalModal();
         showSuccess('Claim approved successfully!');
         
