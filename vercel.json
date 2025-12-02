@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "server.js", "use": "@vercel/node" },
+    { "src": "public/**/*", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/admin-signup.js", "dest": "/public/admin-signup.js" },
+    { "src": "/styles.css", "dest": "/public/styles.css" },
+    { "src": "/login.js", "dest": "/public/login.js" },
+    { "src": "/car-company/(app\\.js|styles\\.css)", "dest": "/public/car-company/$1" },
+    { "src": "/insurance-company/(app\\.js|styles\\.css)", "dest": "/public/insurance-company/$1" },
+    { "src": "/admin-signup(?:/.*)?", "dest": "/public/admin-signup/index.html" },
+    { "src": "/car-company(?:(?!/app\\.js|/styles\\.css).*)?", "dest": "/public/car-company/index.html" },
+    { "src": "/insurance-company(?:(?!/app\\.js|/styles\\.css).*)?", "dest": "/public/insurance-company/index.html" },
+    { "src": "/public/(.*)", "dest": "/public/$1" },
+    { "src": "/(?:index\\.html)?", "dest": "/public/index.html" }
+  ]
+}

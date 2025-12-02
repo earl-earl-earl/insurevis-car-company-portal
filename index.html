@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Car Company Document Verification Portal</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <div class="logo">
+          <i class="fas fa-car"></i>
+          <h1>Car Company Portal</h1>
+        </div>
+        <div class="header-info">
+          <span>Document Verification System</span>
+        </div>
+      </header>
+
+      <!-- Claims List Page -->
+      <section id="claimsPage" class="page active">
+        <div class="page-header">
+          <h2>
+            <i class="fas fa-file-contract"></i> Insurance Claims Requiring
+            Verification
+          </h2>
+          <p>Click on a claim to view and verify car company documents</p>
+        </div>
+
+        <div class="search-container">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              id="claimsSearch"
+              placeholder="Search by claim number, user name, or status"
+            />
+          </div>
+          <!-- (moved) Claim status control: will appear on the Claim Documents page when applicable -->
+          <div class="filter-controls">
+            <select id="statusFilter" title="Filter claims by status">
+              <option value="">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="submitted">Submitted</option>
+              <option value="under_review">Under Review</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="claims-table-container">
+          <table class="claims-table" id="claimsTable">
+            <thead>
+              <tr>
+                <th>Claim Number</th>
+                <th>User</th>
+                <th>Status</th>
+                <th>Car Company Verification</th>
+                <th>Total Documents</th>
+                <th>Pending Car Verification</th>
+                <th>Submitted Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="claimsTableBody">
+              <!-- Claims data will be populated here -->
+            </tbody>
+          </table>
+        </div>
+
+        <div id="loadingClaims" class="loading">
+          <i class="fas fa-spinner fa-spin"></i> Loading claims...
+        </div>
+      </section>
+
+      <!-- Documents Page -->
+      <section id="documentsPage" class="page">
+        <div class="page-header">
+          <button id="backToClaims" class="btn-back">
+            <i class="fas fa-arrow-left"></i> Back to Claims
+          </button>
+          <div class="claim-info">
+            <h2 id="claimTitle">Claim Documents</h2>
+            <p id="claimDescription">Car company verifiable documents</p>
+          </div>
+        </div>
+
+        <div class="documents-container">
+          <!-- Vehicle summary inserted above documents grid -->
+          <div class="vehicle-summary" id="vehicleSummary">
+            <div class="vehicle-summary-inner">
+              <div class="vehicle-left">
+                <h3 id="summaryClaim">
+                  Claim
+                  <span id="statusPill" class="status-pill status-draft"
+                    >Draft</span
+                  >
+                </h3>
+                <p id="summaryUser">User</p>
+              </div>
+              <div class="vehicle-right">
+                <div class="vehicle-field">
+                  <strong>Make:</strong> <span id="summaryMake">-</span>
+                </div>
+                <div class="vehicle-field">
+                  <strong>Model:</strong> <span id="summaryModel">-</span>
+                </div>
+                <div class="vehicle-field">
+                  <strong>Year:</strong> <span id="summaryYear">-</span>
+                </div>
+                <div class="vehicle-field">
+                  <strong>Plate:</strong> <span id="summaryPlate">-</span>
+                </div>
+              </div>
+              <!-- decision actions moved to header-right -->
+            </div>
+          </div>
+          <div class="verification-stats">
+            <div class="stat-card">
+              <div class="stat-icon">
+                <i class="fas fa-file-alt"></i>
+              </div>
+              <div class="stat-content">
+                <h3 id="totalDocs">0</h3>
+                <p>Total Documents</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">
+                <i class="fas fa-check-circle"></i>
+              </div>
+              <div class="stat-content">
+                <h3 id="verifiedDocs">0</h3>
+                <p>Verified by Car Company</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">
+                <i class="fas fa-clock"></i>
+              </div>
+              <div class="stat-content">
+                <h3 id="pendingDocs">0</h3>
+                <p>Pending Verification</p>
+              </div>
+            </div>
+          </div>
+          <!-- Claim decision actions moved to header-right -->
+          <div class="claim-decision-actions" id="claimDecisionActions">
+            <p class="title">Claim Decision</p>
+            <br />
+            <div class="actions">
+              <button
+                id="approveClaimBtn"
+                type="button"
+                class="btn-success decision-btn"
+              >
+                <i class="fas fa-check-circle"></i>
+                <span>Approve</span>
+              </button>
+              <button
+                id="rejectClaimBtn"
+                type="button"
+                class="btn-danger decision-btn"
+              >
+                <i class="fas fa-times-circle"></i>
+                <span>Reject</span>
+              </button>
+              <button
+                id="holdClaimBtn"
+                type="button"
+                class="btn-secondary decision-btn"
+              >
+                <i class="fas fa-pause-circle"></i>
+                <span>Hold</span>
+              </button>
+            </div>
+          </div>
+          <br /><br />
+
+          <div class="documents-grid" id="documentsGrid">
+            <!-- Documents will be populated here -->
+          </div>
+        </div>
+
+        <div id="loadingDocuments" class="loading">
+          <i class="fas fa-spinner fa-spin"></i> Loading documents...
+        </div>
+      </section>
+
+      <!-- Document Viewer Modal -->
+      <div id="documentViewerModal" class="modal">
+        <div class="modal-content large">
+          <div class="modal-header">
+            <h3 id="documentTitle">Document Viewer</h3>
+            <span class="close" onclick="closeDocumentViewer()">&times;</span>
+          </div>
+          <div class="modal-body">
+            <div class="document-info">
+              <div class="info-grid">
+                <div class="info-item">
+                  <label>Document Type:</label>
+                  <span id="docType"></span>
+                </div>
+                <div class="info-item">
+                  <label>File Name:</label>
+                  <span id="docFileName"></span>
+                </div>
+                <div class="info-item">
+                  <label>Upload Date:</label>
+                  <span id="docUploadDate"></span>
+                </div>
+                <div class="info-item">
+                  <label>Status:</label>
+                  <span id="docStatus"></span>
+                </div>
+              </div>
+
+              <div class="vehicle-info-section">
+                <h4><i class="fas fa-car"></i> Vehicle Information</h4>
+                <div class="info-grid">
+                  <div class="info-item">
+                    <label>Vehicle Make:</label>
+                    <span id="vehicleMake">-</span>
+                  </div>
+                  <div class="info-item">
+                    <label>Vehicle Model:</label>
+                    <span id="vehicleModel">-</span>
+                  </div>
+                  <div class="info-item">
+                    <label>Vehicle Year:</label>
+                    <span id="vehicleYear">-</span>
+                  </div>
+                  <div class="info-item">
+                    <label>License Plate:</label>
+                    <span id="licensePlate">-</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="document-viewer">
+              <div id="documentContent">
+                <!-- Document content (image/PDF) will be displayed here -->
+              </div>
+            </div>
+
+            <div class="verification-section">
+              <div class="verification-controls">
+                <label class="checkbox-container">
+                  <input type="checkbox" id="verifyCheckbox" />
+                  <span class="checkmark"></span>
+                  <span class="label-text"
+                    >Verify this document for car company requirements</span
+                  >
+                </label>
+
+                <div class="verification-notes">
+                  <label for="verificationNotes"
+                    >Verification Notes (Optional):</label
+                  >
+                  <textarea
+                    id="verificationNotes"
+                    placeholder="Add any notes about the verification..."
+                  ></textarea>
+                </div>
+
+                <div class="verification-actions">
+                  <button id="saveVerification" class="btn-primary">
+                    <i class="fas fa-save"></i> Save Verification
+                  </button>
+                  <button
+                    id="cancelVerification"
+                    class="btn-secondary"
+                    onclick="closeDocumentViewer()"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
