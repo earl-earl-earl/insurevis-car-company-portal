@@ -301,11 +301,3 @@ async function bootstrap() {
 }
 
 bootstrap();
-  // Don't redirect on SIGNED_OUT events or during logout to avoid redirect loops
-  if (event === 'SIGNED_OUT' || isLoggingOut) {
-    return;
-  }
-  if (session?.user && !isLoggingOut) {
-    redirectForUser(session.user, { silent: true });
-  }
-});

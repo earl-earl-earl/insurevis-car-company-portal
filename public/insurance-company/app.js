@@ -33,6 +33,15 @@ let currentClaimData = null;
 let currentDocuments = [];
 let currentClaimApproved = false;
 
+// Real-time subscription trackers
+let claimsRealtimeSubscription = null;
+let documentsRealtimeSubscription = null;
+let claimsRealtimeReloadTimeout = null;
+let documentsRealtimeReloadTimeout = null;
+// Polling intervals as fallback
+let claimsPollingInterval = null;
+let documentsPollingInterval = null;
+
 // Insurance company verifiable document types
 const INSURANCE_DOCUMENT_TYPES = [
     'lto_or',
@@ -206,6 +215,12 @@ function setupEventListeners() {
                 window.location.replace('/');
             }
         });
+    }
+
+    // Audit Log button
+    const auditLogBtn = document.getElementById('auditLogBtn');
+    if (auditLogBtn) {
+        auditLogBtn.addEventListener('click', toggleAuditLog);
     }
     
     // Document verification
@@ -422,11 +437,6 @@ function sendNotifToUser(userId, title, message, status) {
     })();
 }
 
-// Global realtime subscription tracker for insurance company portal
-let claimsRealtimeSubscription = null;
-// Helper to coalesce rapid realtime events and avoid spamming DB loads
-let claimsRealtimeReloadTimeout = null;
-
 // Claims Management
 async function loadClaims() {
     const loadingElement = document.getElementById('loadingClaims');
@@ -489,6 +499,9 @@ async function loadClaims() {
         }
 
         console.log('Loaded claims:', claims);
+        
+        // Set up realtime subscription for claims changes
+        setupClaimsRealtimeSubscription();
         
         // Filter claims to only show those where ALL car company documents are verified
         const eligibleClaims = claims.filter(claim => {
@@ -566,7 +579,7 @@ async function setupClaimsRealtimeSubscription() {
                 table: 'claims' 
             }, 
             async (payload) => {
-                console.log('📡 Realtime event received:', payload.eventType, payload.new || payload.old);
+                console.log('📡 Realtime claims event received:', payload.eventType, payload.new || payload.old);
 
                 // Only handle events that include new data (INSERT/UPDATE), or deleted claims which also affect the list
                 const eventType = String(payload.eventType || '').toLowerCase();
@@ -579,6 +592,7 @@ async function setupClaimsRealtimeSubscription() {
                 if (claimsRealtimeReloadTimeout) clearTimeout(claimsRealtimeReloadTimeout);
                 claimsRealtimeReloadTimeout = setTimeout(async () => {
                     try {
+                        console.log('🔄 Reloading claims from realtime event...');
                         await loadClaims();
                     } catch (err) {
                         console.error('Error reloading claims from realtime event:', err);
@@ -593,8 +607,141 @@ async function setupClaimsRealtimeSubscription() {
                 console.log('✅ Subscribed to claims realtime updates (insurance company)');
             } else if (status === 'CLOSED') {
                 console.log('❌ Realtime subscription closed');
+            } else if (status === 'CHANNEL_ERROR') {
+                console.error('❌ Realtime channel error - starting polling fallback');
+                startClaimsPolling();
             }
         });
+    
+    // Start polling as fallback (every 5 seconds)
+    startClaimsPolling();
+}
+
+function startClaimsPolling() {
+    // Clear existing interval
+    if (claimsPollingInterval) {
+        clearInterval(claimsPollingInterval);
+    }
+    
+    // Poll every 5 seconds
+    claimsPollingInterval = setInterval(async () => {
+        try {
+            // Only poll when on claims page (not viewing a specific claim)
+            if (document.getElementById('claimsPage').classList.contains('active')) {
+                console.log('🔄 Polling claims (fallback)...');
+                await loadClaims();
+            }
+        } catch (err) {
+            console.error('Error in claims polling:', err);
+        }
+    }, 5000);
+    
+    console.log('✅ Claims polling started (5s interval)');
+}
+
+function stopClaimsPolling() {
+    if (claimsPollingInterval) {
+        clearInterval(claimsPollingInterval);
+        claimsPollingInterval = null;
+        console.log('🛑 Claims polling stopped');
+    }
+}
+
+async function setupDocumentsRealtimeSubscription() {
+    // Unsubscribe from any existing documents subscription
+    if (documentsRealtimeSubscription) {
+        try {
+            supabase.removeChannel(documentsRealtimeSubscription);
+            console.log('🔴 Unsubscribed from previous documents realtime channel');
+        } catch (err) {
+            console.warn('Failed to remove documents channel:', err);
+        }
+        documentsRealtimeSubscription = null;
+    }
+
+    // Only subscribe if we're viewing a specific claim
+    if (!currentClaim) {
+        console.log('ℹ️ No current claim - skipping documents subscription');
+        return;
+    }
+
+    // Subscribe to documents table changes for current claim
+    documentsRealtimeSubscription = supabase
+        .channel('documents-changes')
+        .on('postgres_changes', 
+            { 
+                event: '*', // Listen to INSERT, UPDATE, DELETE
+                schema: 'public', 
+                table: 'documents',
+                filter: `claim_id=eq.${currentClaim}`
+            }, 
+            async (payload) => {
+                console.log('📡 Realtime documents event received:', payload.eventType, payload.new || payload.old);
+
+                // Debounce reloads to avoid repeated full table reloads when many events occur
+                if (documentsRealtimeReloadTimeout) clearTimeout(documentsRealtimeReloadTimeout);
+                documentsRealtimeReloadTimeout = setTimeout(async () => {
+                    try {
+                        console.log('🔄 Reloading documents from realtime event...');
+                        // Reload the current claim's documents
+                        await loadClaimDocuments(currentClaim);
+                        
+                        // Also refresh the claims list to update counts
+                        await loadClaims();
+                    } catch (err) {
+                        console.error('Error reloading documents from realtime event:', err);
+                    } finally {
+                        documentsRealtimeReloadTimeout = null;
+                    }
+                }, 450);
+            }
+        )
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Subscribed to documents realtime updates for claim:', currentClaim);
+            } else if (status === 'CLOSED') {
+                console.log('❌ Documents realtime subscription closed');
+            } else if (status === 'CHANNEL_ERROR') {
+                console.error('❌ Documents channel error - starting polling fallback');
+                startDocumentsPolling();
+            }
+        });
+    
+    // Start polling as fallback (every 5 seconds)
+    startDocumentsPolling();
+}
+
+function startDocumentsPolling() {
+    // Clear existing interval
+    if (documentsPollingInterval) {
+        clearInterval(documentsPollingInterval);
+    }
+    
+    // Only poll if viewing a claim
+    if (!currentClaim) return;
+    
+    // Poll every 5 seconds
+    documentsPollingInterval = setInterval(async () => {
+        try {
+            // Only poll when on documents page
+            if (currentClaim && document.getElementById('documentsPage').classList.contains('active')) {
+                console.log('🔄 Polling documents (fallback) for claim:', currentClaim);
+                await loadClaimDocuments(currentClaim);
+            }
+        } catch (err) {
+            console.error('Error in documents polling:', err);
+        }
+    }, 5000);
+    
+    console.log('✅ Documents polling started (5s interval) for claim:', currentClaim);
+}
+
+function stopDocumentsPolling() {
+    if (documentsPollingInterval) {
+        clearInterval(documentsPollingInterval);
+        documentsPollingInterval = null;
+        console.log('🛑 Documents polling stopped');
+    }
 }
 
 function displayClaims(claims) {
@@ -715,6 +862,9 @@ async function viewClaimDocuments(claimId) {
     
     // Load documents for this claim
     await loadClaimDocuments(claimId);
+    
+    // Set up real-time subscription for documents
+    await setupDocumentsRealtimeSubscription();
 }
 
 async function loadClaimDocuments(claimId) {
@@ -825,9 +975,11 @@ async function loadClaimDocuments(claimId) {
         
         // Ensure decision actions visibility is correct after all updates
         // This helps with the initial load issue
+        // BUT only if the document viewer modal is NOT open
         setTimeout(() => {
             const decisionActions = document.getElementById('approvalActionsRow');
-            if (decisionActions && !currentClaimApproved && currentClaim) {
+            const isModalOpen = document.getElementById('documentViewerModal').style.display === 'flex';
+            if (decisionActions && !currentClaimApproved && currentClaim && !isModalOpen) {
                 decisionActions.style.display = 'flex';
             }
         }, 100);
@@ -963,10 +1115,11 @@ async function viewDocument(documentId, canVerify) {
         return;
     }
 
-    // Hide approve/reject buttons when modal opens
+    // ALWAYS hide approve/reject buttons when document viewer modal opens
     const approvalActionsRow = document.getElementById('approvalActionsRow');
     if (approvalActionsRow) {
         approvalActionsRow.style.display = 'none';
+        console.log('🙈 Hidden Approval Actions when opening document viewer');
     }
 
     // Populate modal with document information
@@ -988,11 +1141,11 @@ async function viewDocument(documentId, canVerify) {
     }
 
     // Show/hide verification controls based on whether this document can be verified by insurance
-    const verificationSection = document.getElementById('verificationSection');
+    const verificationSection = document.querySelector('.verification-section');
     const rejectionNoteDisplay = document.getElementById('documentRejectionNoteDisplay');
     
     if (canVerify && !currentClaimApproved) {
-        verificationSection.style.display = 'block';
+        if (verificationSection) verificationSection.style.display = 'block';
         if (rejectionNoteDisplay) rejectionNoteDisplay.style.display = 'none';
         
         // --- NEW LOGIC START ---
@@ -1031,7 +1184,7 @@ async function viewDocument(documentId, canVerify) {
         // --- NEW LOGIC END ---
         
     } else {
-        verificationSection.style.display = 'none';
+        if (verificationSection) verificationSection.style.display = 'none';
         
         // Show document rejection note if claim is rejected and document has a rejection note
         if (currentClaimApproved && currentClaimData && currentClaimData.status === 'rejected' && doc.insurance_verification_notes) {
@@ -1099,10 +1252,11 @@ async function loadDocumentContent(doc) {
                 </div>
             `;
         } else if (fileExtension === 'pdf') {
-            // Display PDF using iframe
+            // Display PDF using iframe with 125% zoom
+            const pdfUrlWithZoom = fileUrl + '#zoom=100';
             contentDiv.innerHTML = `
                 <div class="document-preview pdf-preview">
-                    <iframe src="${fileUrl}" 
+                    <iframe src="${pdfUrlWithZoom}" 
                             style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 8px;"
                             title="PDF Viewer - ${doc.file_name}">
                         <p>Your browser doesn't support PDF viewing. 
@@ -1169,7 +1323,7 @@ function navigateDocument(direction) {
 
 async function handleDocumentDecision(decision) {
     if (currentClaimApproved) {
-        showError('Claim is approved. Documents are view-only.');
+        notify('error', 'Error', 'Claim is approved. Documents are view-only.', 1500);
         return;
     }
     
@@ -1179,12 +1333,23 @@ async function handleDocumentDecision(decision) {
     const isVerified = decision === 'verify';
     
     try {
+        // Get current user for audit trail
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+            notify('error', 'Error', 'User session expired. Please login again.', 1500);
+            window.location.replace('/');
+            return;
+        }
+
         const updateData = {
-            verified_by_insurance_company: isVerified
+            verified_by_insurance_company: isVerified,
+            insurance_verified_by: user.id  // Track WHO verified it
         };
 
         if (isVerified) {
             updateData.insurance_verification_date = new Date().toISOString();
+            updateData.insurance_verification_notes = null;
         } else {
             updateData.insurance_verification_date = null;
         }
@@ -1196,7 +1361,7 @@ async function handleDocumentDecision(decision) {
 
         if (error) {
             console.error('Error updating document verification:', error);
-            showError('Failed to save verification status');
+            notify('error', 'Error', 'Failed to save verification status', 1500);
             return;
         }
 
@@ -1225,6 +1390,12 @@ async function handleDocumentDecision(decision) {
             currentDocuments[docIndex] = { ...currentDocuments[docIndex], ...updateData };
         }
 
+        // IMPORTANT: Keep approval actions hidden while we're still in the modal
+        const approvalActionsRow = document.getElementById('approvalActionsRow');
+        if (approvalActionsRow) {
+            approvalActionsRow.style.display = 'none';
+        }
+        
         // Refresh displays
         const insuranceDocuments = currentDocuments.filter(doc => 
             INSURANCE_DOCUMENT_TYPES.includes(doc.type)
@@ -1233,28 +1404,21 @@ async function handleDocumentDecision(decision) {
         displayInsuranceDocuments(insuranceDocuments);
         updateApprovalButtonStatus(insuranceDocuments);
         
-        // Show success message
-        showSuccess(isVerified ? 'Document Verified' : 'Document Rejected/Unverified');
+        // Show success message with shorter timeout (1.5 seconds)
+        notify('success', 'Success', isVerified ? 'Document verified successfully!' : 'Document verification removed', 1500);
         
-        // Update current view buttons
-        const canVerify = INSURANCE_DOCUMENT_TYPES.includes(currentDocuments[docIndex].type);
-        viewDocument(currentDocId, canVerify); // Refresh buttons state
-
-        // Reload claims to update counts
-        setTimeout(() => {
-            loadClaims();
-        }, 1000);
+        // NOTE: We don't reload claims here to avoid flickering.
+        // The claims list will auto-update via real-time subscriptions or when navigating back.
+        
+        // Ensure approval actions stay hidden after all updates
+        if (approvalActionsRow) {
+            approvalActionsRow.style.display = 'none';
+        }
         
         // Auto-navigate to next document
         // Only if we are not at the last document
         const currentIndex = currentDocuments.findIndex(d => d.id === currentDocId);
         if (currentIndex < currentDocuments.length - 1) {
-            // Hide decision actions before navigating to prevent flash
-            const decisionActions = document.getElementById('approvalActionsRow');
-            if (decisionActions) {
-                decisionActions.style.display = 'none';
-            }
-            
             setTimeout(() => {
                 navigateDocument(1);
             }, 500);
@@ -1263,16 +1427,15 @@ async function handleDocumentDecision(decision) {
             document.getElementById('documentViewerModal').style.display = 'none';
             // Restore decision actions
             if (!currentClaimApproved && currentClaim) {
-                const decisionActions = document.getElementById('approvalActionsRow');
-                if (decisionActions) {
-                    decisionActions.style.display = 'flex';
+                if (approvalActionsRow) {
+                    approvalActionsRow.style.display = 'flex';
                 }
             }
         }
 
     } catch (error) {
         console.error('Error saving verification:', error);
-        showError('Failed to save verification status');
+        notify('error', 'Error', 'Failed to save verification status', 1500);
     }
 }
 
@@ -1344,8 +1507,10 @@ function updateApprovalButtonStatus(insuranceDocuments) {
         insuranceDocuments.every(doc => doc.verified_by_insurance_company);
     
     // Show the action buttons as long as the claim is not approved/rejected
+    // AND the document viewer modal is NOT currently open
     if (approvalActionsRow) {
-        if (!currentClaimApproved) {
+        const isModalOpen = document.getElementById('documentViewerModal').style.display === 'flex';
+        if (!currentClaimApproved && !isModalOpen) {
             approvalActionsRow.style.display = 'flex';
         } else {
             approvalActionsRow.style.display = 'none';
@@ -1462,6 +1627,25 @@ function showClaimsPage() {
     if (approvalActionsRow) {
         approvalActionsRow.style.display = 'none';
     }
+    
+    // Unsubscribe from documents real-time when leaving claim view
+    if (documentsRealtimeSubscription) {
+        try {
+            supabase.removeChannel(documentsRealtimeSubscription);
+            console.log('🔴 Unsubscribed from documents realtime channel');
+        } catch (err) {
+            console.warn('Failed to unsubscribe from documents channel:', err);
+        }
+        documentsRealtimeSubscription = null;
+    }
+    
+    // Stop documents polling
+    stopDocumentsPolling();
+    
+    // Ensure claims polling is active
+    if (!claimsPollingInterval) {
+        startClaimsPolling();
+    }
 }
 
 function showDocumentsPage() {
@@ -1473,10 +1657,13 @@ function showDocumentsPage() {
 function closeDocumentViewer() {
     document.getElementById('documentViewerModal').style.display = 'none';
 
-    // Restore buttons if appropriate
-    const approvalActionsRow = document.getElementById('approvalActionsRow');
-    if (currentClaim && approvalActionsRow && !currentClaimApproved) {
-         approvalActionsRow.style.display = 'flex';
+    // ALWAYS restore approval actions visibility when closing viewer (if claim is open and not approved/rejected)
+    if (currentClaim && !currentClaimApproved) {
+        const approvalActionsRow = document.getElementById('approvalActionsRow');
+        if (approvalActionsRow) {
+            approvalActionsRow.style.display = 'flex';
+            console.log('👁️ Restored Approval Actions after closing document viewer');
+        }
     }
 }
 
@@ -1977,4 +2164,368 @@ async function openDocumentInNewTab(documentId) {
         showError('Failed to open document: ' + (e.message || e));
     }
 }
+
+// --- Audit Log Feature (copied from Car Company portal and adapted) ---
+let isShowingAuditLog = false;
+let allAuditLogs = [];
+
+// Toggle between claims table and audit log table
+async function toggleAuditLog() {
+    const claimsTableContainer = document.getElementById('claimsTableContainer');
+    const auditLogTableContainer = document.getElementById('auditLogTableContainer');
+    const auditLogControls = document.getElementById('auditLogControls');
+    const auditLogBtn = document.getElementById('auditLogBtn');
+    const loadingClaims = document.getElementById('loadingClaims');
+    const loadingAuditLog = document.getElementById('loadingAuditLog');
+    const searchContainer = document.querySelector('.search-container');
+    
+    isShowingAuditLog = !isShowingAuditLog;
+    
+    if (isShowingAuditLog) {
+        if (claimsTableContainer) claimsTableContainer.style.display = 'none';
+        if (auditLogTableContainer) auditLogTableContainer.style.display = 'block';
+        if (auditLogControls) auditLogControls.style.display = 'block';
+        if (loadingClaims) loadingClaims.style.display = 'none';
+        if (searchContainer) searchContainer.style.display = 'none';
+        
+        if (auditLogBtn) auditLogBtn.innerHTML = '<i class="fas fa-table"></i> View Claims';
+        setupAuditLogFilters();
+        await loadAuditLogs();
+    } else {
+        if (claimsTableContainer) claimsTableContainer.style.display = 'block';
+        if (auditLogTableContainer) auditLogTableContainer.style.display = 'none';
+        if (auditLogControls) auditLogControls.style.display = 'none';
+        if (loadingAuditLog) loadingAuditLog.style.display = 'none';
+        if (searchContainer) searchContainer.style.display = 'flex';
+        
+        if (auditLogBtn) auditLogBtn.innerHTML = '<i class="fas fa-list-ul"></i> Audit Log';
+        await loadClaims();
+    }
+}
+
+// Load audit logs from Supabase
+async function loadAuditLogs(filters = {}) {
+    const loadingElement = document.getElementById('loadingAuditLog');
+    const tableBody = document.getElementById('auditLogTableBody');
+    if (!loadingElement || !tableBody) return;
+    loadingElement.style.display = 'block';
+    tableBody.innerHTML = '';
+    try {
+        let query = supabase
+            .from('audit_logs')
+            .select(`
+                id,
+                user_id,
+                user_role,
+                user_name,
+                claim_id,
+                claim_number,
+                action,
+                action_description,
+                timestamp,
+                outcome,
+                status,
+                ip_address,
+                user_agent,
+                metadata,
+                created_at,
+                users:user_id (
+                    name,
+                    email,
+                    role
+                )
+            `)
+            .order('timestamp', { ascending: false })
+            .limit(200);
+
+        if (filters.action) query = query.eq('action', filters.action);
+        if (filters.outcome) query = query.eq('outcome', filters.outcome);
+        if (filters.search) query = query.or(`claim_number.ilike.%${filters.search}%,user_name.ilike.%${filters.search}%`);
+
+        const { data: auditLogs, error } = await query;
+
+        if (error) {
+            console.error('Error fetching audit logs:', error);
+            tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #666;">Failed to load audit logs. Please try again.</td></tr>';
+            return;
+        }
+
+        if (!auditLogs || auditLogs.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #666;">No audit log entries found.</td></tr>';
+            allAuditLogs = [];
+            return;
+        }
+
+        allAuditLogs = auditLogs;
+        displayAuditLogs(auditLogs);
+    } catch (err) {
+        console.error('Error loading audit logs:', err);
+        tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #666;">An error occurred while loading audit logs.</td></tr>';
+    } finally {
+        loadingElement.style.display = 'none';
+    }
+}
+
+function displayAuditLogs(auditLogs) {
+    const tableBody = document.getElementById('auditLogTableBody');
+    if (!tableBody) return;
+    tableBody.innerHTML = '';
+    auditLogs.forEach(log => {
+        const row = document.createElement('tr');
+        row.style.cursor = 'pointer';
+        row.title = 'Click to view details';
+        row.addEventListener('click', () => showAuditLogDetails(log));
+
+        const userName = log.user_name || (log.users && log.users.name) || 'Unknown User';
+        const userEmail = log.users && log.users.email ? log.users.email : '';
+        const userRole = log.user_role ? log.user_role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : '';
+        const userCell = document.createElement('td');
+        userCell.innerHTML = `
+            <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 500;">${escapeHtml(userName)}</span>
+                <span style="font-size: 0.85rem; color: #666;">${escapeHtml(userRole)}</span>
+                ${userEmail ? `<span style="font-size: 0.75rem; color: #999;">${escapeHtml(userEmail)}</span>` : ''}
+            </div>
+        `;
+        row.appendChild(userCell);
+
+        const claimCell = document.createElement('td');
+        claimCell.innerHTML = `
+            <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 500;">${escapeHtml(log.claim_number)}</span>
+                <span style="font-size: 0.75rem; color: #999; font-family: monospace;">${escapeHtml((log.claim_id || '').substring(0,8))}...</span>
+            </div>
+        `;
+        row.appendChild(claimCell);
+
+        const actionCell = document.createElement('td');
+        const actionBadge = getActionBadge(log.action);
+        const hasMetadata = log.metadata && Object.keys(log.metadata).length > 0;
+        actionCell.innerHTML = `
+            <div style="display: flex; flex-direction: column;">
+                <span>${actionBadge}</span>
+                ${log.action_description ? `<span style="font-size: 0.85rem; color: #666; margin-top: 4px;">${escapeHtml(log.action_description)}</span>` : ''}
+                ${hasMetadata ? `<span style="font-size: 0.75rem; color: #3b82f6; margin-top: 2px;"><i class="fas fa-info-circle"></i> Has metadata</span>` : ''}
+            </div>
+        `;
+        row.appendChild(actionCell);
+
+        const timestampCell = document.createElement('td');
+        const timestamp = new Date(log.timestamp);
+        timestampCell.innerHTML = `
+            <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 500;">${formatDate(timestamp)}</span>
+                <span style="font-size: 0.85rem; color: #666;">${formatTime(timestamp)}</span>
+            </div>
+        `;
+        row.appendChild(timestampCell);
+
+        const statusCell = document.createElement('td');
+        statusCell.innerHTML = getStatusBadge(log.outcome || log.status);
+        row.appendChild(statusCell);
+
+        tableBody.appendChild(row);
+    });
+}
+
+function setupAuditLogFilters() {
+    const actionFilter = document.getElementById('actionFilter');
+    const outcomeFilter = document.getElementById('outcomeFilter');
+    const auditSearch = document.getElementById('auditSearch');
+    if (!actionFilter || !outcomeFilter || !auditSearch) return;
+
+    const newActionFilter = actionFilter.cloneNode(true);
+    actionFilter.parentNode.replaceChild(newActionFilter, actionFilter);
+    const newOutcomeFilter = outcomeFilter.cloneNode(true);
+    outcomeFilter.parentNode.replaceChild(newOutcomeFilter, outcomeFilter);
+    const newAuditSearch = auditSearch.cloneNode(true);
+    auditSearch.parentNode.replaceChild(newAuditSearch, auditSearch);
+
+    newActionFilter.addEventListener('change', applyAuditLogFilters);
+    newOutcomeFilter.addEventListener('change', applyAuditLogFilters);
+    newAuditSearch.addEventListener('input', debounce(applyAuditLogFilters, 300));
+}
+
+async function applyAuditLogFilters() {
+    const actionFilter = document.getElementById('actionFilter');
+    const outcomeFilter = document.getElementById('outcomeFilter');
+    const auditSearch = document.getElementById('auditSearch');
+    const filters = {};
+    if (actionFilter && actionFilter.value) filters.action = actionFilter.value;
+    if (outcomeFilter && outcomeFilter.value) filters.outcome = outcomeFilter.value;
+    if (auditSearch && auditSearch.value.trim()) filters.search = auditSearch.value.trim();
+    await loadAuditLogs(filters);
+}
+
+function showAuditLogDetails(log) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    const timestamp = new Date(log.timestamp);
+    const hasMetadata = log.metadata && Object.keys(log.metadata).length > 0;
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-file-alt"></i> Audit Log Details</h3>
+                <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="display: grid; gap: 20px;">
+                    <div class="info-section">
+                        <h4 style="color: #667eea; margin-bottom: 12px;"><i class="fas fa-user"></i> User Information</h4>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Name:</label>
+                                <span>${escapeHtml(log.user_name || 'Unknown')}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Role:</label>
+                                <span>${escapeHtml(log.user_role)}</span>
+                            </div>
+                            ${log.users && log.users.email ? `
+                            <div class="info-item">
+                                <label>Email:</label>
+                                <span>${escapeHtml(log.users.email)}</span>
+                            </div>` : ''}
+                            ${log.ip_address ? `
+                            <div class="info-item">
+                                <label>IP Address:</label>
+                                <span style="font-family: monospace;">${escapeHtml(log.ip_address)}</span>
+                            </div>` : ''}
+                        </div>
+                    </div>
+                    <div class="info-section">
+                        <h4 style="color: #667eea; margin-bottom: 12px;"><i class="fas fa-file-contract"></i> Claim Information</h4>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Claim Number:</label>
+                                <span style="font-weight: 600;">${escapeHtml(log.claim_number)}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Claim ID:</label>
+                                <span style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(log.claim_id)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="info-section">
+                        <h4 style="color: #667eea; margin-bottom: 12px;"><i class="fas fa-tasks"></i> Action Details</h4>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Action:</label>
+                                <span>${getActionBadge(log.action)}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Outcome:</label>
+                                <span>${getStatusBadge(log.outcome)}</span>
+                            </div>
+                            ${log.status ? `
+                            <div class="info-item">
+                                <label>Related Status:</label>
+                                <span>${getStatusBadge(log.status)}</span>
+                            </div>` : ''}
+                            ${log.action_description ? `
+                            <div class="info-item" style="grid-column: 1 / -1;">
+                                <label>Description:</label>
+                                <span>${escapeHtml(log.action_description)}</span>
+                            </div>` : ''}
+                        </div>
+                    </div>
+                    <div class="info-section">
+                        <h4 style="color: #667eea; margin-bottom: 12px;"><i class="fas fa-clock"></i> Timing</h4>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Timestamp:</label>
+                                <span>${formatDate(timestamp)} at ${formatTime(timestamp)}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Log ID:</label>
+                                <span style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(log.id)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    ${hasMetadata ? `
+                    <div class="info-section">
+                        <h4 style="color: #667eea; margin-bottom: 12px;"><i class="fas fa-database"></i> Additional Data (Metadata)</h4>
+                        <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                            <pre style="margin: 0; font-size: 0.9rem; white-space: pre-wrap; word-wrap: break-word;">${JSON.stringify(log.metadata, null, 2)}</pre>
+                        </div>
+                    </div>` : ''}
+                    ${log.user_agent ? `
+                    <div class="info-section">
+                        <h4 style="color: #667eea; margin-bottom: 12px;"><i class="fas fa-desktop"></i> Browser/Client Information</h4>
+                        <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                            <code style="font-size: 0.85rem; word-break: break-all;">${escapeHtml(log.user_agent)}</code>
+                        </div>
+                    </div>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+// Debounce helper
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => { clearTimeout(timeout); func(...args); };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Action badge helper
+function getActionBadge(action) {
+    const actionLabels = {
+        'claim_created': { label: 'Claim Created', icon: 'fa-plus-circle', color: '#3b82f6' },
+        'claim_submitted': { label: 'Claim Submitted', icon: 'fa-paper-plane', color: '#8b5cf6' },
+        'claim_updated': { label: 'Claim Updated', icon: 'fa-edit', color: '#6366f1' },
+        'claim_approved': { label: 'Claim Approved', icon: 'fa-check-circle', color: '#10b981' },
+        'claim_rejected': { label: 'Claim Rejected', icon: 'fa-times-circle', color: '#ef4444' },
+        'document_uploaded': { label: 'Document Uploaded', icon: 'fa-upload', color: '#3b82f6' },
+        'document_verified': { label: 'Document Verified', icon: 'fa-check-square', color: '#10b981' },
+        'document_rejected': { label: 'Document Rejected', icon: 'fa-ban', color: '#f59e0b' },
+        'car_company_approval': { label: 'Car Co. Approval', icon: 'fa-car', color: '#10b981' },
+        'car_company_rejection': { label: 'Car Co. Rejection', icon: 'fa-car', color: '#ef4444' },
+        'insurance_company_approval': { label: 'Insurance Approval', icon: 'fa-shield', color: '#10b981' },
+        'insurance_company_rejection': { label: 'Insurance Rejection', icon: 'fa-shield', color: '#ef4444' },
+        'status_changed': { label: 'Status Changed', icon: 'fa-exchange-alt', color: '#6366f1' },
+        'notes_added': { label: 'Notes Added', icon: 'fa-sticky-note', color: '#8b5cf6' },
+        'other': { label: 'Other Action', icon: 'fa-circle', color: '#6b7280' }
+    };
+    const actionInfo = actionLabels[action] || actionLabels['other'];
+    return `<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 4px; background-color: ${actionInfo.color}15; color: ${actionInfo.color}; font-size: 0.9rem; font-weight: 500;"><i class="fas ${actionInfo.icon}"></i> ${actionInfo.label}</span>`;
+}
+
+// Status badge helper
+function getStatusBadge(status) {
+    if (!status) return '<span style="color: #999;">—</span>';
+    const statusColors = {
+        'success': { bg: '#10b98115', color: '#10b981', label: 'Success' },
+        'failure': { bg: '#ef444415', color: '#ef4444', label: 'Failed' },
+        'pending': { bg: '#f59e0b15', color: '#f59e0b', label: 'Pending' },
+        'cancelled': { bg: '#6b728015', color: '#6b7280', label: 'Cancelled' },
+        'approved': { bg: '#10b98115', color: '#10b981', label: 'Approved' },
+        'rejected': { bg: '#ef444415', color: '#ef4444', label: 'Rejected' },
+        'under_review': { bg: '#3b82f615', color: '#3b82f6', label: 'Under Review' }
+    };
+    const statusInfo = statusColors[(status || '').toLowerCase()] || { bg: '#6b728015', color: '#6b7280', label: status };
+    return `<span style="display: inline-block; padding: 4px 12px; border-radius: 12px; background-color: ${statusInfo.bg}; color: ${statusInfo.color}; font-size: 0.85rem; font-weight: 600;">${statusInfo.label}</span>`;
+}
+
+// Simple HTML escape
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Format time helper
+function formatTime(date) {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+// End audit log feature
 

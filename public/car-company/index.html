@@ -36,11 +36,16 @@
       <!-- Claims List Page -->
       <section id="claimsPage" class="page active">
         <div class="page-header">
-          <h2>
-            <i class="fas fa-file-contract"></i> Insurance Claims Requiring
-            Verification
-          </h2>
-          <p>Click on a claim to view and verify car company documents</p>
+          <div>
+            <h2>
+              <i class="fas fa-file-contract"></i> Insurance Claims Requiring
+              Verification
+            </h2>
+            <p>Click on a claim to view and verify car company documents</p>
+          </div>
+          <button id="auditLogBtn" class="btn-secondary" type="button">
+            <i class="fas fa-list-ul"></i> Audit Log
+          </button>
         </div>
 
         <div class="search-container">
@@ -55,7 +60,7 @@
           <!-- (moved) Claim status control: will appear on the Claim Documents page when applicable -->
           <div class="filter-controls">
             <select id="statusFilter" title="Filter claims by status">
-              <option value="">All Statuses</option>
+              <option value="">All Status</option>
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
@@ -64,7 +69,7 @@
           </div>
         </div>
 
-        <div class="claims-table-container">
+        <div class="claims-table-container" id="claimsTableContainer">
           <table class="claims-table" id="claimsTable">
             <thead>
               <tr>
@@ -83,8 +88,53 @@
           </table>
         </div>
 
+        <div class="audit-log-controls" id="auditLogControls" style="display: none;">
+          <div class="audit-filter-group">
+            <select id="actionFilter" class="audit-filter">
+              <option value="">All Actions</option>
+              <option value="claim_created">Claim Created</option>
+              <option value="claim_submitted">Claim Submitted</option>
+              <option value="claim_approved">Claim Approved</option>
+              <option value="claim_rejected">Claim Rejected</option>
+              <option value="document_verified">Document Verified</option>
+              <option value="document_rejected">Document Rejected</option>
+              <option value="car_company_approval">Car Company Approval</option>
+              <option value="car_company_rejection">Car Company Rejection</option>
+              <option value="status_changed">Status Changed</option>
+            </select>
+            <select id="outcomeFilter" class="audit-filter">
+              <option value="">All Outcomes</option>
+              <option value="success">Success</option>
+              <option value="failure">Failure</option>
+              <option value="pending">Pending</option>
+            </select>
+            <input type="text" id="auditSearch" class="audit-filter" placeholder="Search by claim number or user...">
+          </div>
+        </div>
+
+        <div class="audit-log-table-container" id="auditLogTableContainer" style="display: none;">
+          <table class="claims-table audit-log-table" id="auditLogTable">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Claim ID</th>
+                <th>Action</th>
+                <th>Timestamp</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="auditLogTableBody">
+              <!-- Audit log data will be populated here -->
+            </tbody>
+          </table>
+        </div>
+
         <div id="loadingClaims" class="loading">
           <i class="fas fa-spinner fa-spin"></i> Loading claims...
+        </div>
+        
+        <div id="loadingAuditLog" class="loading" style="display: none;">
+          <i class="fas fa-spinner fa-spin"></i> Loading audit log...
         </div>
       </section>
 
@@ -219,95 +269,107 @@
 
       <!-- Document Viewer Modal -->
       <div id="documentViewerModal" class="modal">
-        <div class="modal-content large">
+        <div class="modal-content large-viewer">
           <div class="modal-header">
             <h3 id="documentTitle">Document Viewer</h3>
             <span class="close" onclick="closeDocumentViewer()">&times;</span>
           </div>
-          <div class="modal-body">
-            <div class="document-info">
-              <div class="info-grid">
-                <div class="info-item">
-                  <label>Document Type:</label>
-                  <span id="docType"></span>
-                </div>
-                <div class="info-item">
-                  <label>File Name:</label>
-                  <span id="docFileName"></span>
-                </div>
-                <div class="info-item">
-                  <label>Upload Date:</label>
-                  <span id="docUploadDate"></span>
-                </div>
-                <div class="info-item">
-                  <label>Status:</label>
-                  <span id="docStatus"></span>
-                </div>
-              </div>
-
-              <div class="vehicle-info-section">
-                <h4><i class="fas fa-car"></i> Vehicle Information</h4>
-                <div class="info-grid">
-                  <div class="info-item">
-                    <label>Vehicle Make:</label>
-                    <span id="vehicleMake">-</span>
-                  </div>
-                  <div class="info-item">
-                    <label>Vehicle Model:</label>
-                    <span id="vehicleModel">-</span>
-                  </div>
-                  <div class="info-item">
-                    <label>Vehicle Year:</label>
-                    <span id="vehicleYear">-</span>
-                  </div>
-                  <div class="info-item">
-                    <label>License Plate:</label>
-                    <span id="licensePlate">-</span>
-                  </div>
+          <div class="modal-body viewer-layout">
+            <!-- Left Side: Document Preview -->
+            <div class="viewer-left">
+              <div class="document-viewer">
+                <div id="documentContent">
+                  <!-- Document content (image/PDF) will be displayed here -->
                 </div>
               </div>
             </div>
 
-            <!-- Document Rejection Note (shown when document is rejected and claim is rejected) -->
-            <div id="documentRejectionNoteDisplay" class="document-rejection-note-display">
-              <div class="rejection-note-header">
-                <i class="fas fa-exclamation-circle"></i>
-                <strong>Document Rejected</strong>
-              </div>
-              <div class="rejection-note-content" id="documentRejectionNoteContent"></div>
-            </div>
+            <!-- Right Side: Info and Actions -->
+            <div class="viewer-right">
+              <div class="viewer-right-content">
+                <!-- Document Info -->
+                <div class="document-info-card">
+                  <h4><i class="fas fa-file-alt"></i> Document Information</h4>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <label>Document Type:</label>
+                      <span id="docType"></span>
+                    </div>
+                    <div class="info-item">
+                      <label>File Name:</label>
+                      <span id="docFileName"></span>
+                    </div>
+                    <div class="info-item">
+                      <label>Upload Date:</label>
+                      <span id="docUploadDate"></span>
+                    </div>
+                    <div class="info-item">
+                      <label>Status:</label>
+                      <span id="docStatus"></span>
+                    </div>
+                  </div>
+                  <button class="btn-download" onclick="openDocumentInNewTab(document.getElementById('documentViewerModal').dataset.currentDocId)" title="Download or open in new tab">
+                    <i class="fas fa-download"></i> Download Document
+                  </button>
+                </div>
 
-            <div class="document-viewer">
-              <div id="documentContent">
-                <!-- Document content (image/PDF) will be displayed here -->
-              </div>
-            </div>
+                <!-- Vehicle Info -->
+                <div class="vehicle-info-card">
+                  <h4><i class="fas fa-car"></i> Vehicle Information</h4>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <label>Make:</label>
+                      <span id="vehicleMake">-</span>
+                    </div>
+                    <div class="info-item">
+                      <label>Model:</label>
+                      <span id="vehicleModel">-</span>
+                    </div>
+                    <div class="info-item">
+                      <label>Year:</label>
+                      <span id="vehicleYear">-</span>
+                    </div>
+                    <div class="info-item">
+                      <label>License Plate:</label>
+                      <span id="licensePlate">-</span>
+                    </div>
+                  </div>
+                </div>
 
-            <div class="verification-section">
-              <div class="verification-controls">
-                <div class="batch-navigation-controls" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 1rem;">
-                  <button id="prevDocBtn" class="btn-secondary" title="Previous Document">
+                <!-- Document Rejection Note Display -->
+                <div id="documentRejectionNoteDisplay" class="document-rejection-note-display">
+                  <div class="rejection-note-header">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <strong>Document Rejected</strong>
+                  </div>
+                  <div class="rejection-note-content" id="documentRejectionNoteContent"></div>
+                </div>
+
+                <!-- Navigation Controls -->
+                <div class="navigation-controls">
+                  <button id="prevDocBtn" class="btn-nav" title="Previous Document">
                     <i class="fas fa-chevron-left"></i> Previous
                   </button>
-                  
-                  <div class="verification-actions-group" style="display: flex; gap: 10px;">
-                    <button id="verifyDocBtn" class="btn-success">
-                      <i class="fas fa-check"></i> Verify
-                    </button>
-                    <button id="rejectDocumentBtn" class="btn-danger">
-                      <i class="fas fa-times"></i> Reject Document
-                    </button>
-                  </div>
-
-                  <button id="nextDocBtn" class="btn-secondary" title="Next Document">
+                  <button id="nextDocBtn" class="btn-nav" title="Next Document">
                     Next <i class="fas fa-chevron-right"></i>
                   </button>
                 </div>
-                <!-- Hidden checkbox for backward compatibility if needed, or just remove -->
+
+                <!-- Verification Actions -->
+                <div class="verification-section">
+                  <div class="verification-actions">
+                    <button id="verifyDocBtn" class="btn-verify">
+                      <i class="fas fa-check-circle"></i> Verify Document
+                    </button>
+                    <button id="rejectDocumentBtn" class="btn-reject">
+                      <i class="fas fa-times-circle"></i> Reject Document
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Document Rejection Pane -->
+            <!-- Document Rejection Pane (Overlay on right side) -->
             <div id="documentRejectionPane" class="document-rejection-pane">
               <div class="rejection-pane-header">
                 <h4>Reject Document</h4>

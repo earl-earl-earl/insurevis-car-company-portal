@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>InsureVis Portal Login</title>
+    <title>InsureVis | My Portal </title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://kit.fontawesome.com/467447bdef.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -19,21 +19,30 @@
 
     <div class="login-page">
       <div class="login-card" role="form" aria-labelledby="login-title">
-        <div class="login-card__brand">
-          <div class="brand-icon">
+        <!-- Left side - Image/Branding -->
+        <div class="login-card__left">
+          <div class="brand-icon-large">
             <i class="fa-solid fa-shield"></i>
           </div>
-          <div>
-            <h1 id="login-title">InsureVis Partner Portal</h1>
-            <p>Sign in to continue to your workspace</p>
+          <div class="left-content">
+            <p class="tagline">You can easily</p>
+            <h2 class="hero-text">Access vehicle damages with just a photo. Let AI handle it for you.</h2>
           </div>
         </div>
 
-        <form id="loginForm" autocomplete="on" novalidate>
-          <div class="form-field">
-            <label for="email">Email address</label>
-            <div class="input-wrapper">
-              <i class="fas fa-envelope"></i>
+        <!-- Right side - Login Form -->
+        <div class="login-card__right">
+          <div class="login-header">
+            <div class="brand-icon-small">
+              <i class="fa-solid fa-shield"></i>
+            </div>
+            <h1 id="login-title">InsureVis Portal</h1>
+            <p class="subtitle">Simple, yet effective way to securely access your platform with InsureVis. Sign in to continue.</p>
+          </div>
+
+          <form id="loginForm" autocomplete="on" novalidate>
+            <div class="form-field">
+              <label for="email">Your email</label>
               <input
                 id="email"
                 name="email"
@@ -43,57 +52,59 @@
                 autocomplete="email"
               />
             </div>
-          </div>
 
-          <div class="form-field">
-            <label for="password">Password</label>
-            <div class="input-wrapper">
-              <i class="fas fa-lock"></i>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="••••••••"
-                required
-                autocomplete="current-password"
-                minlength="6"
-              />
-              <button
-                type="button"
-                class="toggle-password"
-                aria-label="Show password"
-              >
-                <i class="fas fa-eye"></i>
-              </button>
+            <div class="form-field">
+              <label for="password">Password</label>
+              <div class="password-wrapper">
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  placeholder="••••••••"
+                  required
+                  autocomplete="current-password"
+                  minlength="6"
+                />
+                <button
+                  type="button"
+                  class="toggle-password"
+                  aria-label="Show password"
+                >
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
             </div>
+
+            <div class="form-field-checkbox">
+              <input
+                type="checkbox"
+                id="rememberMe"
+                name="rememberMe"
+              />
+              <label for="rememberMe">Remember me on this device</label>
+            </div>
+
+            <div
+              class="status-message"
+              id="loginMessage"
+              role="alert"
+              aria-live="polite"
+            ></div>
+
+            <button id="loginSubmit" type="submit" class="btn-primary">
+              <span class="btn-label">Sign In</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+          </form>
+
+          <div class="login-divider"></div>
+
+          <div class="login-footer-text">
+            <p>
+              Access is restricted to authorised InsureVis partners. Need help?
+              <a href="mailto:support@insurevis.com">Contact Support</a>
+            </p>
           </div>
-
-          <div class="form-footer">
-            <label class="remember-me">
-              <input id="remember" type="checkbox" name="remember" />
-              <span>Keep me signed in on this device</span>
-            </label>
-            <a href="#" class="forgot-link" id="forgotPasswordLink">Forgot password?</a>
-          </div>
-
-          <div
-            class="status-message"
-            id="loginMessage"
-            role="alert"
-            aria-live="polite"
-          ></div>
-
-          <button id="loginSubmit" type="submit" class="btn-primary">
-            <span class="btn-label">Sign in</span>
-            <span class="btn-spinner" aria-hidden="true"></span>
-          </button>
-        </form>
-
-        <div class="login-card__footer">
-          <p>
-            Access is restricted to authorised InsureVis partners. Need help?
-            <a href="mailto:support@insurevis.com">Contact support</a>.
-          </p>
         </div>
       </div>
     </div>
