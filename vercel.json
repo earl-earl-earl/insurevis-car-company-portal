@@ -1,10 +1,11 @@
 {
   "version": 2,
   "builds": [
-    { "src": "server.js", "use": "@vercel/node" },
+    { "src": "api/**/*.js", "use": "@vercel/node" },
     { "src": "public/**/*", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/admin-signup.js", "dest": "/public/admin-signup.js" },
     { "src": "/styles.css", "dest": "/public/styles.css" },
     { "src": "/login.js", "dest": "/public/login.js" },
