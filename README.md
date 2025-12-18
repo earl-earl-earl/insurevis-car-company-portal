@@ -1,84 +1,171 @@
-# InsureVis Admin Portal
+# InsureVis Web Portal
 
-The InsureVis Admin Portal provides a secure entry point for partner organisations (car companies and insurance carriers) while giving administrators a dedicated workflow for provisioning new accounts.
+> *Streamlining insurance claim document verification between car companies and insurance carriers.*
 
-## Highlights
+---
 
-- **Centralised login** powered by Supabase authentication with role-aware redirects to the correct workspace.
-- **Hidden admin sign-up** page at `/admin-signup/` for provisioning new partner or admin accounts (not linked from the UI).
-- **Dedicated partner dashboards** for car companies and insurance companies under `/car-company/` and `/insurance-company/`.
-- **Server-side API gateway** (`server.js`) for handling secure integrations and file operations.
+## 📖 About
+InsureVis Web Portal is a **multi-role document verification platform** designed to bridge the gap between car companies and insurance companies during the claims process. The system eliminates manual verification bottlenecks by providing dedicated portals for each stakeholder, ensuring secure, role-based access to insurance claim documents.
 
-## Getting Started
+**Why this project?**  
+Traditional insurance claim verification involves fragmented communication, delayed document sharing, and manual approval workflows. InsureVis centralizes this process with real-time document uploads, verification workflows, and comprehensive audit trails—reducing claim processing time and improving transparency.
 
-1. **Install dependencies**
-  ```powershell
-  npm install
-  ```
-2. **Configure Supabase**
-  - Confirm the Supabase URL and anon key in `public/login.js`, `public/admin-signup.js`, and `supabase_config.js`.
-  - Ensure portal roles (`car_company`, `insurance_company`, `admin`) exist in user metadata or supporting tables.
-3. **Run the server locally**
-  ```powershell
-  npm run dev
-  ```
-  The app serves static assets from `public/` and exposes API routes from `server.js`.
+---
 
-## Key Pages
+## 🛠 Tech Stack
 
-- `/` – Partner login screen with role-based redirection.
-- `/admin-signup/` – Unlisted administrative sign-up form. Share the URL only with trusted personnel.
-- `/car-company/` – Car company workspace (accessible after login when the user role resolves to `car_company`).
-- `/insurance-company/` – Insurance carrier workspace (accessible after login when role resolves to `insurance_company`).
+**Frontend:**
+* Vanilla JavaScript (ES6+)
+* HTML5 & CSS3
+* [Font Awesome](https://fontawesome.com/) for icons
 
-### Admin Sign-up Flow
+**Backend:**
+* [Node.js](https://nodejs.org/) (v14+)
+* [Express.js](https://expressjs.com/) - API gateway and server
+* [Multer](https://github.com/expressjs/multer) - File upload handling
 
-1. Navigate directly to `https://<your-domain>/admin-signup/`.
-2. Enter the email, password, and desired portal role.
-3. The form provisions a new Supabase user and stores the selected role in the user metadata so the login page can route correctly.
-4. Newly created users receive an email confirmation (if enabled in Supabase) before they can sign in.
+**Database & Authentication:**
+* [Supabase](https://supabase.com/) - PostgreSQL database, authentication, and storage
+* [@supabase/supabase-js](https://www.npmjs.com/package/@supabase/supabase-js) - Supabase client library
 
-## Project Structure
+**Deployment:**
+* [Vercel](https://vercel.com/) - Serverless deployment platform
+
+---
+
+## ✨ Key Features
+
+* **Role-Based Authentication:** Secure login system with automatic role detection and workspace routing (Admin, Car Company, Insurance Company)
+* **Dedicated Partner Dashboards:** Separate interfaces for car companies and insurance carriers with tailored workflows
+* **Document Verification System:** Upload, review, and approve/reject insurance claim documents with status tracking
+* **Hidden Admin Portal:** Administrative sign-up page for provisioning new partner accounts (security through obscurity)
+* **Audit Trail Logging:** Comprehensive tracking of all verification actions and document status changes
+* **Real-Time Data Sync:** Integration with Supabase for instant updates across all connected sessions
+* **Secure File Storage:** Cloud-based document storage with role-based access controls
+* **Responsive Design:** Works seamlessly across desktop and mobile devices
+
+---
+
+## 🚀 Getting Started
+
+Follow these steps to set up the project locally.
+
+### Prerequisites
+* Node.js (v14 or higher)
+* npm or yarn
+* Supabase account with a configured project
+
+### Installation
+
+1. **Clone the repository**
+   ```sh
+   git clone https://github.com/yourusername/insurevis-web-portal.git
+   cd insurevis-web-portal
+   ```
+
+2. **Install dependencies**
+   ```sh
+   npm install
+   ```
+
+3. **Configure Supabase**
+   - Create a Supabase project at [supabase.com](https://supabase.com)
+   - Update your Supabase URL and anon key in:
+     - `public/login.js`
+     - `public/admin-signup.js`
+     - `supabase_config.js`
+   - Run the SQL migrations in `db/` and `supabase_*.sql` files to set up tables and policies
+
+4. **Set up environment variables**
+   - Create a `.env` file in the root directory
+   - Add your Supabase credentials:
+     ```
+     SUPABASE_URL=your_supabase_url
+     SUPABASE_ANON_KEY=your_anon_key
+     SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+     ```
+
+5. **Generate test data (optional)**
+   ```sh
+   npm run generate-test-data
+   ```
+
+6. **Run the development server**
+   ```sh
+   npm run dev
+   ```
+   The application will be available at `http://localhost:3000`
+
+### Usage
+
+- **Login:** Navigate to `/` and sign in with your credentials
+- **Admin Sign-up:** Access `/admin-signup/` to create new partner accounts (admin only)
+- **Car Company Portal:** Automatically redirected to `/car-company/` after login
+- **Insurance Company Portal:** Automatically redirected to `/insurance-company/` after login
+
+---
+
+## 📂 Project Structure
 
 ```
 web_portal/
-├── public/
-│   ├── index.html                 # Login interface
-│   ├── login.js                   # Supabase login / role router
-│   ├── styles.css                 # Shared auth styling
-│   ├── admin-signup/
-│   │   └── index.html             # Hidden admin sign-up page
-│   ├── admin-signup.js            # Admin sign-up logic
-│   ├── car-company/
-│   │   ├── index.html             # Car company workspace shell
-│   │   ├── app.js                 # Car company portal logic
-│   │   └── styles.css             # Car company styling
-│   └── insurance-company/
-│       ├── index.html             # Insurance company workspace shell
-│       ├── app.js                 # Insurance company portal logic
-│       └── styles.css             # Insurance company styling
-├── server.js                      # Express server & API gateway
-├── supabase_config.js             # Supabase client configuration for server-side use
-├── generate_test_data.js          # Utility for creating sample data
-├── package.json                   # Project metadata and scripts
-└── README.md                      # Project documentation (this file)
+├── public/                        # Static frontend assets
+│   ├── index.html                 # Login page
+│   ├── login.js                   # Authentication logic
+│   ├── styles.css                 # Global styles
+│   ├── admin-signup/              # Hidden admin interface
+│   │   └── index.html
+│   ├── car-company/               # Car company workspace
+│   │   ├── index.html
+│   │   ├── app.js
+│   │   └── styles.css
+│   └── insurance-company/         # Insurance carrier workspace
+│       ├── index.html
+│       ├── app.js
+│       └── styles.css
+├── api/
+│   └── config/
+│       └── supabase.js            # Supabase configuration
+├── db/                            # Database migrations
+├── server.js                      # Express API gateway
+├── supabase_config.js             # Server-side Supabase client
+├── generate_test_data.js          # Test data generator
+├── package.json
+├── vercel.json                    # Vercel deployment config
+└── README.md
 ```
+---
 
-## Scripts
+## 🚦 Available Scripts
 
-- `npm start` – Run the production server.
-- `npm run dev` – Start the development server with nodemon.
-- `npm run test:server` – Invoke legacy demo server tests (requires demo scripts).
-- `npm run generate-test-data` – Populate Supabase with demo data (requires proper environment setup).
+- `npm start` - Run the production server
+- `npm run dev` - Start development server with hot reload (nodemon)
+- `npm run generate-test-data` - Populate database with sample insurance claims
+- `npm run cleanup-test-data` - Remove test data from database
+- `npm run test-info` - Display information about test data
 
-> **Note:** Some historical scripts refer to demo test files. They remain for compatibility but may require bespoke fixtures to execute successfully.
+---
 
-## Deployment
+## 🌐 Deployment
 
-- The project is configured for Vercel (`vercel.json`) to serve `/public` as static assets and route everything else through `server.js`.
-- Dedicated rewrites ensure `/admin-signup/` and `/admin-signup.js` are served directly without hitting the login fallback.
-- Update environment variables in Vercel to match your Supabase credentials before deploying.
+The project is configured for **Vercel** deployment:
 
-## Support
+1. Push your code to GitHub
+2. Import the project in Vercel
+3. Add environment variables in Vercel dashboard:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Deploy!
 
-Questions or requests? Contact the InsureVis engineering team at [support@insurevis.com](mailto:support@insurevis.com).
+The `vercel.json` configuration handles routing, serving static files from `/public`, and API routes through `server.js`.
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License.
+
+---
+
+*Built with ❤️ for streamlined insurance claim processing*
